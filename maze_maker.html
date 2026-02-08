@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Chobocho's 미로 생성기</title>
+  <style>
+    /* === 스타일 설정 === */
+    :root {
+      --bg-color: #f4f4f4;
+      --panel-bg: #ffffff;
+      --primary-color: #4CAF50;
+    }
+
+    body {
+      margin: 0; padding: 0;
+      width: 100vw; height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-color);
+      font-family: 'Segoe UI', sans-serif;
+      display: flex; flex-direction: column;
+    }
+
+    .controls {
+      flex: 0 0 auto;
+      z-index: 100;
+      display: flex; gap: 10px; padding: 10px;
+      background: var(--panel-bg);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      align-items: center; flex-wrap: wrap; justify-content: center;
+    }
+
+    .group {
+      display: flex; align-items: center; gap: 5px;
+      padding-right: 10px; border-right: 1px solid #eee;
+    }
+    .group:last-child { border-right: none; }
+
+    input[type="number"] { width: 50px; padding: 6px; border-radius: 4px; border: 1px solid #ccc; text-align: center; }
+
+    button {
+      padding: 8px 12px; border: none; border-radius: 6px;
+      cursor: pointer; font-weight: bold; font-size: 14px;
+      background-color: #eee; transition: 0.2s; white-space: nowrap;
+    }
+    button:active { transform: scale(0.95); }
+    button.primary { background-color: var(--primary-color); color: white; }
+    button.download { background-color: #2196F3; color: white; }
+    button.active { background-color: #333; color: white; border: 2px solid #333; }
+
+    .color-picker { display: flex; gap: 8px; }
+    .color-dot {
+      width: 28px; height: 28px; border-radius: 50%;
+      cursor: pointer; border: 2px solid #ddd; position: relative;
+    }
+    .color-dot.active { border-color: #333; transform: scale(1.1); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .color-dot::after {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      border-radius: 50%; background: inherit; opacity: 0.5;
+    }
+
+    #canvas-wrapper {
+      flex: 1 1 auto; position: relative;
+      width: 100%; height: 100%;
+      display: flex; justify-content: center; align-items: center;
+      overflow: hidden; background-color: #e0e0e0;
+      touch-action: none;
+    }
+
+    canvas {
+      position: absolute;
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+      background: transparent;
+    }
+
+    #maze-layer { z-index: 1; background-color: white; }
+    #draw-layer { z-index: 2; cursor: crosshair; }
+  </style>
+</head>
+<body>
+
+<div class="controls">
+  <div class="group">
+    <input type="number" id="maze-size" value="30" min="5" max="100" title="미로 크기 설정 30 ~ 100" placeholder="크기">
+    <button class="primary" onclick="generateNewMaze()">새 미로</button>
+  </div>
+
+  <div class="group">
+    <div class="color-picker">
+      <div class="color-dot active" style="background: black;" data-color="#000000" onclick="setColor(this)"></div>
+      <div class="color-dot" style="background: red;" data-color="#FF0000" onclick="setColor(this)"></div>
+      <div class="color-dot" style="background: blue;" data-color="#0000FF" onclick="setColor(this)"></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <button id="btn-pen" class="active" onclick="setMode('pen')" title="펜 모드로 변경">✏️</button>
+    <button id="btn-eraser" onclick="setMode('eraser')" title="지우개 모드로 변경">🧽</button>
+    <button onclick="resetAll()" title="그림 모두 지우기">🗑️</button>
+  </div>
+
+  <div class="group" style="border:none;">
+    <button class="download" onclick="downloadImage()" title="그림 저장">💾</button>
+  </div>
+</div>
+
+<div id="canvas-wrapper">
+  <canvas id="maze-layer"></canvas>
+  <canvas id="draw-layer"></canvas>
+</div>
+
+<script>
+  const mazeCanvas = document.getElementById('maze-layer');
+  const mazeCtx = mazeCanvas.getContext('2d');
+  const drawCanvas = document.getElementById('draw-layer');
+
+  // === [수정됨] 성능 최적화 옵션 적용 ===
+  const drawCtx = drawCanvas.getContext('2d', { willReadFrequently: true });
+
+  const wrapper = document.getElementById('canvas-wrapper');
+  const bufferCanvas = document.createElement('canvas');
+  const bufferCtx = bufferCanvas.getContext('2d');
+
+  // 상태 변수
+  let isDrawing = false;
+  let mode = 'pen';
+  let currentRGB = '#000000';
+  let currentOpacity = 0.5;
+  let mazeGrid = [];
+  let currentSize = 30;
+
+  // 경로 저장용 (복구용)
+  let savedPaths = [];
+
+  // === 1. 미로 로직 (DFS) ===
+  function generateMazeGrid(size) {
+    let grid = [];
+    for (let y = 0; y < size; y++) {
+      let row = [];
+      for (let x = 0; x < size; x++) {
+        row.push({ x, y, top: true, right: true, bottom: true, left: true, visited: false });
+      }
+      grid.push(row);
+    }
+    let stack = [];
+    let current = grid[0][0];
+    current.visited = true;
+    stack.push(current);
+    const directions = [
+      { dx: 0, dy: -1, wall: 'top', opp: 'bottom' },
+      { dx: 0, dy: 1, wall: 'bottom', opp: 'top' },
+      { dx: -1, dy: 0, wall: 'left', opp: 'right' },
+      { dx: 1, dy: 0, wall: 'right', opp: 'left' }
+    ];
+    while (stack.length > 0) {
+      current = stack[stack.length - 1];
+      let neighbors = [];
+      for (let d of directions) {
+        let nx = current.x + d.dx;
+        let ny = current.y + d.dy;
+        if (nx >= 0 && nx < size && ny >= 0 && ny < size && !grid[ny][nx].visited) {
+          neighbors.push({ cell: grid[ny][nx], dir: d });
+        }
+      }
+      if (neighbors.length > 0) {
+        let chosen = neighbors[Math.floor(Math.random() * neighbors.length)];
+        current[chosen.dir.wall] = false;
+        chosen.cell[chosen.dir.opp] = false;
+        chosen.cell.visited = true;
+        stack.push(chosen.cell);
+      } else {
+        stack.pop();
+      }
+    }
+    return grid;
+  }
+
+  function drawMaze(grid, size) {
+    const maxWidth = wrapper.clientWidth - 20;
+    const maxHeight = wrapper.clientHeight - 20;
+    const cellSize = Math.floor(Math.min(maxWidth / size, maxHeight / size));
+    const canvasWidth = cellSize * size;
+    const canvasHeight = cellSize * size;
+
+    mazeCanvas.width = canvasWidth;
+    mazeCanvas.height = canvasHeight;
+    drawCanvas.width = canvasWidth;
+    drawCanvas.height = canvasHeight;
+    bufferCanvas.width = canvasWidth;
+    bufferCanvas.height = canvasHeight;
+
+    mazeCtx.fillStyle = "white";
+    mazeCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // 시작/끝
+    mazeCtx.fillStyle = "#FF5252";
+    mazeCtx.fillRect(0, 0, cellSize, cellSize);
+    mazeCtx.fillStyle = "#448AFF";
+    mazeCtx.fillRect((size - 1) * cellSize, (size - 1) * cellSize, cellSize, cellSize);
+
+    // 벽
+    mazeCtx.strokeStyle = "#333";
+    mazeCtx.lineWidth = 2;
+    mazeCtx.beginPath();
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const cell = grid[y][x];
+        const px = x * cellSize;
+        const py = y * cellSize;
+        if (cell.top) { mazeCtx.moveTo(px, py); mazeCtx.lineTo(px + cellSize, py); }
+        if (cell.left) { mazeCtx.moveTo(px, py); mazeCtx.lineTo(px, py + cellSize); }
+        if (cell.bottom) { mazeCtx.moveTo(px, py + cellSize); mazeCtx.lineTo(px + cellSize, py + cellSize); }
+        if (cell.right) { mazeCtx.moveTo(px + cellSize, py); mazeCtx.lineTo(px + cellSize, py + cellSize); }
+      }
+    }
+    mazeCtx.stroke();
+  }
+
+  // === 2. 세션 저장소(DB) 로직 ===
+  function saveSession() {
+    const data = {
+      size: currentSize,
+      grid: mazeGrid,
+      paths: savedPaths
+    };
+    sessionStorage.setItem('mazeSession', JSON.stringify(data));
+  }
+
+  function loadSession() {
+    const dataStr = sessionStorage.getItem('mazeSession');
+    if (dataStr) {
+      const data = JSON.parse(dataStr);
+      currentSize = data.size;
+      mazeGrid = data.grid;
+      savedPaths = data.paths || [];
+      document.getElementById('maze-size').value = currentSize;
+      return true;
+    }
+    return false;
+  }
+
+  function restoreDrawing() {
+    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+    const w = drawCanvas.width;
+    const h = drawCanvas.height;
+
+    savedPaths.forEach(path => {
+      drawCtx.beginPath();
+      drawCtx.lineCap = 'round';
+      drawCtx.lineJoin = 'round';
+
+      if (path.mode === 'eraser') {
+        drawCtx.globalCompositeOperation = 'destination-out';
+        drawCtx.globalAlpha = 1.0;
+        drawCtx.lineWidth = 20;
+      } else {
+        drawCtx.globalCompositeOperation = 'source-over';
+        drawCtx.strokeStyle = path.color;
+        drawCtx.globalAlpha = currentOpacity;
+        let lw = (w / currentSize) * 0.2;
+        drawCtx.lineWidth = lw < 1 ? 1 : lw;
+      }
+
+      if (path.points.length > 0) {
+        drawCtx.moveTo(path.points[0].x * w, path.points[0].y * h);
+        for (let i = 1; i < path.points.length; i++) {
+          drawCtx.lineTo(path.points[i].x * w, path.points[i].y * h);
+        }
+        drawCtx.stroke();
+      }
+    });
+  }
+
+  // === 3. 메인 초기화 함수 ===
+  function initApp() {
+    if (loadSession()) {
+      drawMaze(mazeGrid, currentSize);
+      restoreDrawing();
+    } else {
+      generateNewMaze();
+    }
+  }
+
+  function generateNewMaze() {
+    const sizeInput = document.getElementById('maze-size');
+    let size = parseInt(sizeInput.value);
+    if(size < 5) size = 5;
+    if(size > 100) size = 100;
+    currentSize = size;
+
+    mazeGrid = generateMazeGrid(size);
+    savedPaths = [];
+
+    drawMaze(mazeGrid, size);
+    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    saveSession();
+  }
+
+  // === 4. 그리기 기능 (최적화됨) ===
+  let currentPath = null;
+  let savedImageData = null;
+
+  function getPos(e) {
+    const rect = drawCanvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function startDraw(e) {
+    if (e.cancelable) e.preventDefault();
+    isDrawing = true;
+    const pos = getPos(e);
+
+    currentPath = {
+      mode: mode,
+      color: currentRGB,
+      points: [{ x: pos.x / drawCanvas.width, y: pos.y / drawCanvas.height }]
+    };
+
+    if (mode === 'pen') {
+      drawCtx.globalCompositeOperation = 'source-over';
+
+      // willReadFrequently: true 덕분에 경고 없이 빠르게 읽음
+      savedImageData = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
+
+      bufferCtx.clearRect(0, 0, bufferCanvas.width, bufferCanvas.height);
+      bufferCtx.beginPath();
+      bufferCtx.moveTo(pos.x, pos.y);
+      bufferCtx.lineCap = 'round';
+      bufferCtx.lineJoin = 'round';
+      bufferCtx.strokeStyle = currentRGB;
+      let lw = (drawCanvas.width / currentSize) * 0.2;
+      bufferCtx.lineWidth = lw < 1 ? 1 : lw;
+    } else {
+      drawCtx.beginPath();
+      drawCtx.moveTo(pos.x, pos.y);
+    }
+    draw(e);
+  }
+
+  function draw(e) {
+    if (!isDrawing) return;
+    if (e.cancelable) e.preventDefault();
+    const pos = getPos(e);
+
+    currentPath.points.push({ x: pos.x / drawCanvas.width, y: pos.y / drawCanvas.height });
+
+    if (mode === 'pen') {
+      bufferCtx.lineTo(pos.x, pos.y);
+      bufferCtx.stroke();
+
+      // 백그라운드 복구 -> 새 그림 얹기
+      drawCtx.putImageData(savedImageData, 0, 0);
+      drawCtx.save();
+      drawCtx.globalAlpha = currentOpacity;
+      drawCtx.drawImage(bufferCanvas, 0, 0);
+      drawCtx.restore();
+    } else {
+      drawCtx.globalCompositeOperation = 'destination-out';
+      drawCtx.globalAlpha = 1.0;
+      drawCtx.lineWidth = 20;
+      drawCtx.lineCap = 'round';
+      drawCtx.lineJoin = 'round';
+      drawCtx.lineTo(pos.x, pos.y);
+      drawCtx.stroke();
+      drawCtx.beginPath();
+      drawCtx.moveTo(pos.x, pos.y);
+    }
+  }
+
+  function stopDraw() {
+    if (!isDrawing) return;
+    isDrawing = false;
+
+    if (mode === 'pen') {
+      bufferCtx.closePath();
+      drawCtx.closePath();
+      savedImageData = null;
+    } else {
+      drawCtx.closePath();
+    }
+
+    if (currentPath && currentPath.points.length > 0) {
+      savedPaths.push(currentPath);
+      saveSession();
+    }
+  }
+
+  // 이벤트 리스너
+  drawCanvas.addEventListener('mousedown', startDraw);
+  drawCanvas.addEventListener('mousemove', draw);
+  drawCanvas.addEventListener('mouseup', stopDraw);
+  drawCanvas.addEventListener('mouseout', stopDraw);
+
+  drawCanvas.addEventListener('touchstart', startDraw, { passive: false });
+  drawCanvas.addEventListener('touchmove', draw, { passive: false });
+  drawCanvas.addEventListener('touchend', stopDraw);
+
+  // 툴바
+  function setColor(element) {
+    setMode('pen');
+    currentRGB = element.dataset.color;
+    document.querySelectorAll('.color-dot').forEach(el => el.classList.remove('active'));
+    element.classList.add('active');
+  }
+
+  function setMode(newMode) {
+    mode = newMode;
+    document.getElementById('btn-pen').classList.toggle('active', mode === 'pen');
+    document.getElementById('btn-eraser').classList.toggle('active', mode === 'eraser');
+  }
+
+  function resetAll() {
+    if(confirm('그림을 모두 지우시겠습니까?')) {
+      savedPaths = [];
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      saveSession();
+    }
+  }
+
+  function downloadImage() {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = mazeCanvas.width;
+    tempCanvas.height = mazeCanvas.height;
+    const tCtx = tempCanvas.getContext('2d');
+
+    tCtx.fillStyle = "white";
+    tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+    tCtx.drawImage(mazeCanvas, 0, 0);
+    tCtx.drawImage(drawCanvas, 0, 0);
+
+    const link = document.createElement('a');
+    link.download = `maze_${Date.now()}.png`;
+    link.href = tempCanvas.toDataURL();
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  window.addEventListener('resize', () => {
+    if (mazeGrid.length > 0) {
+      drawMaze(mazeGrid, currentSize);
+      restoreDrawing();
+    }
+  });
+
+  window.onload = initApp;
+
+</script>
+</body>
+</html>
