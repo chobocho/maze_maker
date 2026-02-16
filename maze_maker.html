@@ -1,311 +1,610 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Chobocho's 미로 생성기</title>
-  <style>
-    :root {
-      --bg-color: #f4f4f4;
-      --panel-bg: #ffffff;
-      --primary-color: #4CAF50;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Chobocho's 미로 생성기 V0.2</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f4;
+            --panel-bg: #ffffff;
+            --primary-color: #4CAF50;
+        }
 
-    /* [수정] 100vh 대신 100dvh를 사용하여 브라우저 바에 가려짐 방지 */
-    body {
-      margin: 0; padding: 0;
-      width: 100vw;
-      height: 100dvh; /* Dynamic Viewport Height */
-      overflow: hidden;
-      background-color: var(--bg-color);
-      font-family: 'Segoe UI', sans-serif;
-      display: flex; flex-direction: column;
-    }
+        /* [수정] 100vh 대신 100dvh를 사용하여 브라우저 바에 가려짐 방지 */
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100dvh; /* Dynamic Viewport Height */
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
 
-    .controls {
-      flex: 0 0 auto;
-      z-index: 100;
-      display: flex; gap: 8px; padding: 10px;
-      background: var(--panel-bg);
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      align-items: center; flex-wrap: wrap; justify-content: center;
-    }
+        .controls {
+            flex: 0 0 auto;
+            z-index: 100;
+            display: flex;
+            gap: 8px;
+            padding: 10px;
+            background: var(--panel-bg);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
 
-    .group {
-      display: flex; align-items: center; gap: 5px;
-      padding-right: 8px; border-right: 1px solid #eee;
-    }
-    .group:last-child { border-right: none; }
+        .group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding-right: 8px;
+            border-right: 1px solid #eee;
+        }
 
-    input[type="number"] { width: 45px; padding: 6px; border-radius: 4px; border: 1px solid #ccc; text-align: center; font-size: 16px; }
+        .group:last-child {
+            border-right: none;
+        }
 
-    button {
-      padding: 8px 12px; border: none; border-radius: 6px;
-      cursor: pointer; font-weight: bold; font-size: 14px;
-      background-color: #eee; transition: 0.2s; white-space: nowrap;
-    }
-    button:active { transform: scale(0.95); }
-    button.primary { background-color: var(--primary-color); color: white; }
-    button.download { background-color: #2196F3; color: white; }
-    button.active { background-color: #333; color: white; border: 2px solid #333; }
+        input[type="number"] {
+            width: 45px;
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            text-align: center;
+            font-size: 16px;
+        }
 
-    .color-picker { display: flex; gap: 8px; }
-    .color-dot {
-      width: 28px; height: 28px; border-radius: 50%;
-      cursor: pointer; border: 2px solid #ddd; position: relative;
-    }
-    .color-dot.active { border-color: #333; transform: scale(1.1); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-    .color-dot::after {
-      content: ''; position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      border-radius: 50%; background: inherit; opacity: 0.5;
-    }
+        button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            background-color: #eee;
+            transition: 0.2s;
+            white-space: nowrap;
+        }
 
-    #canvas-wrapper {
-      flex: 1 1 auto; position: relative;
-      width: 100%;
-      height: 100%; /* 부모의 남은 공간 차지 */
-      display: flex; justify-content: center; align-items: center;
-      overflow: hidden; background-color: #e0e0e0;
-      touch-action: none; /* 드로잉 시 화면 밀림 방지 */
-    }
+        button:active {
+            transform: scale(0.95);
+        }
 
-    canvas {
-      position: absolute;
-      box-shadow: 0 0 15px rgba(0,0,0,0.2);
-      background: transparent;
-    }
+        button.primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
 
-    #maze-layer { z-index: 1; background-color: white; }
-    #draw-layer { z-index: 2; cursor: crosshair; }
-  </style>
+        button.download {
+            background-color: #2196F3;
+            color: white;
+        }
+
+        button.active {
+            background-color: #333;
+            color: white;
+            border: 2px solid #333;
+        }
+
+        .color-picker {
+            display: flex;
+            gap: 8px;
+        }
+
+        .color-dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #ddd;
+            position: relative;
+        }
+
+        .color-dot.active {
+            border-color: #333;
+            transform: scale(1.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .color-dot::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: 50%;
+            background: inherit;
+            opacity: 0.5;
+        }
+
+        #canvas-wrapper {
+            flex: 1 1 auto;
+            position: relative;
+            width: 100%;
+            height: 100%; /* 부모의 남은 공간 차지 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            background-color: #e0e0e0;
+            touch-action: none; /* 드로잉 시 화면 밀림 방지 */
+        }
+
+        canvas {
+            position: absolute;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            background: transparent;
+        }
+
+        #maze-layer {
+            z-index: 1;
+            background-color: white;
+        }
+
+        #draw-layer {
+            z-index: 2;
+            cursor: crosshair;
+        }
+
+        /* 컨테이너 정렬 */
+        .menu-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: sans-serif;
+        }
+
+        .menu-text {
+            font-weight: bold;
+            font-size: 28px;
+            padding: 0px 0px 0px 2px;
+        }
+
+        /* 스위치 전체 크기 */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        /* 기본 체크박스 숨기기 */
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        /* 스위치 배경 (회색) */
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 26px; /* 둥근 테두리 */
+        }
+
+        /* 스위치 안의 동그란 버튼 (흰색) */
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%; /* 완전한 원 */
+        }
+
+        /* 체크되었을 때(ON)의 배경색 변화 (초록색) */
+        input:checked + .slider {
+            background-color: #4CAF50;
+        }
+
+        /* 체크되었을 때(ON) 동그란 버튼이 오른쪽으로 이동 */
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+    </style>
 </head>
 <body>
 
 <div class="controls">
-  <div class="group">
-    <input type="number" id="maze-size" value="30" min="5" max="100" title="미로 크기 설정 5 ~ 100" placeholder="크기">
-    <button class="primary" onclick="generateNewMaze()">새 미로</button>
-  </div>
+    <div class="menu-container" title="난이도 조절 버튼">
+        <span class="menu-text">😄</span>
 
-  <div class="group">
-    <div class="color-picker">
-      <div class="color-dot active" style="background: black;" data-color="#000000" onclick="setColor(this)"></div>
-      <div class="color-dot" style="background: red;" data-color="#FF0000" onclick="setColor(this)"></div>
-      <div class="color-dot" style="background: blue;" data-color="#0000FF" onclick="setColor(this)"></div>
+        <label class="toggle-switch">
+            <input type="checkbox" id="easyModeToggle">
+            <span class="slider"></span>
+        </label>
     </div>
-  </div>
+    <div class="group">
+        <input type="number" id="maze-size" value="30" min="5" max="100" title="미로 크기 설정 5 ~ 100" placeholder="크기">
+        <button class="primary" onclick="generateNewMaze()">새 미로</button>
+    </div>
 
-  <div class="group">
-    <button id="btn-pen" class="active" onclick="setMode('pen')" title="펜 모드로 변경">✏️</button>
-    <button id="btn-eraser" onclick="setMode('eraser')" title="지우개 모드로 변경">🧽</button>
-    <button onclick="resetAll()" title="그림 모두 지우기">🗑️</button>
-  </div>
+    <div class="group">
+        <div class="color-picker">
+            <div class="color-dot active" style="background: black;" data-color="#000000"
+                 onclick="setColor(this)"></div>
+            <div class="color-dot" style="background: red;" data-color="#FF0000" onclick="setColor(this)"></div>
+            <div class="color-dot" style="background: blue;" data-color="#0000FF" onclick="setColor(this)"></div>
+        </div>
+    </div>
 
-  <div class="group" style="border:none;">
-    <button class="download" onclick="downloadImage()" title="그림 저장">💾</button>
-  </div>
+    <div class="group">
+        <button id="btn-pen" class="active" onclick="setMode('pen')" title="펜 모드로 변경">✏️</button>
+        <button id="btn-eraser" onclick="setMode('eraser')" title="지우개 모드로 변경">🧽</button>
+        <button onclick="resetAll()" title="그림 모두 지우기">🗑️</button>
+    </div>
+
+    <div class="group" style="border:none;">
+        <button class="download" onclick="downloadImage()" title="그림 저장">💾</button>
+    </div>
 </div>
 
 <div id="canvas-wrapper">
-  <canvas id="maze-layer"></canvas>
-  <canvas id="draw-layer"></canvas>
+    <canvas id="maze-layer"></canvas>
+    <canvas id="draw-layer"></canvas>
 </div>
 
 <script>
-  const mazeCanvas = document.getElementById('maze-layer');
-  const mazeCtx = mazeCanvas.getContext('2d');
-  const drawCanvas = document.getElementById('draw-layer');
-  const drawCtx = drawCanvas.getContext('2d', { willReadFrequently: true });
-  const wrapper = document.getElementById('canvas-wrapper');
-  const bufferCanvas = document.createElement('canvas');
-  const bufferCtx = bufferCanvas.getContext('2d');
+    const mazeCanvas = document.getElementById('maze-layer');
+    const mazeCtx = mazeCanvas.getContext('2d');
+    const drawCanvas = document.getElementById('draw-layer');
+    const drawCtx = drawCanvas.getContext('2d', {willReadFrequently: true});
+    const wrapper = document.getElementById('canvas-wrapper');
+    const bufferCanvas = document.createElement('canvas');
+    const bufferCtx = bufferCanvas.getContext('2d');
 
-  let isDrawing = false;
-  let mode = 'pen';
-  let currentRGB = '#000000';
-  let currentOpacity = 0.5;
-  let mazeGrid = [];
-  let currentSize = 30;
-  let savedPaths = [];
+    let isEasyMode = true;
+    let isDrawing = false;
+    let mode = 'pen';
+    let currentRGB = '#000000';
+    let currentOpacity = 0.5;
+    let mazeGrid = [];
+    let mazeEndPoint = {};
+    let currentSize = 30;
+    let savedPaths = [];
 
-  function generateMazeGrid(size) {
-    let grid = [];
-    for (let y = 0; y < size; y++) {
-      let row = [];
-      for (let x = 0; x < size; x++) {
-        row.push({ x, y, top: true, right: true, bottom: true, left: true, visited: false });
-      }
-      grid.push(row);
-    }
-    let stack = [];
-    let current = grid[0][0];
-    current.visited = true;
-    stack.push(current);
-    const directions = [{ dx: 0, dy: -1, wall: 'top', opp: 'bottom' }, { dx: 0, dy: 1, wall: 'bottom', opp: 'top' }, { dx: -1, dy: 0, wall: 'left', opp: 'right' }, { dx: 1, dy: 0, wall: 'right', opp: 'left' }];
-    while (stack.length > 0) {
-      current = stack[stack.length - 1];
-      let neighbors = [];
-      for (let d of directions) {
-        let nx = current.x + d.dx; let ny = current.y + d.dy;
-        if (nx >= 0 && nx < size && ny >= 0 && ny < size && !grid[ny][nx].visited) {
-          neighbors.push({ cell: grid[ny][nx], dir: d });
+    function generateMazeGrid(size) {
+        let grid = [];
+        for (let y = 0; y < size; y++) {
+            let row = [];
+            for (let x = 0; x < size; x++) {
+                // 나중에 그리기 쉽도록 isStart, isEnd 속성을 추가해 둡니다.
+                row.push({
+                    x, y,
+                    top: true, right: true, bottom: true, left: true,
+                    visited: false,
+                    isStart: false, isEnd: false
+                });
+            }
+            grid.push(row);
         }
-      }
-      if (neighbors.length > 0) {
-        let chosen = neighbors[Math.floor(Math.random() * neighbors.length)];
-        current[chosen.dir.wall] = false; chosen.cell[chosen.dir.opp] = false; chosen.cell.visited = true; stack.push(chosen.cell);
-      } else { stack.pop(); }
+
+        let stack = [];
+        let current = grid[0][0];
+        current.visited = true;
+        current.isStart = true; // [0][0]을 시작 지점으로 확실히 표시
+        stack.push(current);
+
+        const directions = [
+            {dx: 0, dy: -1, wall: 'top', opp: 'bottom'},
+            {dx: 0, dy: 1, wall: 'bottom', opp: 'top'},
+            {dx: -1, dy: 0, wall: 'left', opp: 'right'},
+            {dx: 1, dy: 0, wall: 'right', opp: 'left'}
+        ];
+
+        // 💡 [추가된 로직] 최대 거리와 가장 먼 칸을 기억할 변수 준비
+        let maxDistance = 0;
+        let farthestCell = current;
+
+        while (stack.length > 0) {
+            current = stack[stack.length - 1];
+
+            // 💡 [추가된 로직] 현재 수첩(stack)의 두께(=이동 거리)가
+            // 지금까지 기록된 최대 거리보다 크다면 신기록 갱신!
+            if (stack.length > maxDistance) {
+                maxDistance = stack.length;
+                farthestCell = current; // 현재 위치를 가장 먼 곳으로 기억해 둡니다.
+            }
+
+            let neighbors = [];
+            for (let d of directions) {
+                let nx = current.x + d.dx;
+                let ny = current.y + d.dy;
+                if (nx >= 0 && nx < size && ny >= 0 && ny < size && !grid[ny][nx].visited) {
+                    neighbors.push({cell: grid[ny][nx], dir: d});
+                }
+            }
+
+            if (neighbors.length > 0) {
+                let chosen = neighbors[Math.floor(Math.random() * neighbors.length)];
+                current[chosen.dir.wall] = false;
+                chosen.cell[chosen.dir.opp] = false;
+                chosen.cell.visited = true;
+                stack.push(chosen.cell);
+            } else {
+                stack.pop();
+            }
+        }
+
+        // 💡 [추가된 로직] 탐험이 모두 끝난 후, 가장 멀었던 칸을 종료 지점으로 표시
+        farthestCell.isEnd = true;
+
+        // 미로 판(grid)뿐만 아니라, 찾은 종료 지점의 정보도 함께 반환합니다.
+        return {
+            grid: grid,
+            endPoint: { x: farthestCell.x, y: farthestCell.y },
+            maxDistance: maxDistance // 출발지로부터 몇 칸이나 떨어져 있는지 (난이도 측정용)
+        };
     }
-    return grid;
-  }
 
-  function drawMaze(grid, size) {
-    // [수정] 여백을 40px로 늘려 폴드 하단 바 등에 가려지지 않게 함
-    const maxWidth = wrapper.clientWidth - 40;
-    const maxHeight = wrapper.clientHeight - 40;
-    const cellSize = Math.floor(Math.min(maxWidth / size, maxHeight / size));
-    const canvasWidth = cellSize * size;
-    const canvasHeight = cellSize * size;
+    function drawMaze(grid, size) {
+        // [수정] 여백을 40px로 늘려 폴드 하단 바 등에 가려지지 않게 함
+        const maxWidth = wrapper.clientWidth - 40;
+        const maxHeight = wrapper.clientHeight - 40;
+        const cellSize = Math.floor(Math.min(maxWidth / size, maxHeight / size));
+        const canvasWidth = cellSize * size;
+        const canvasHeight = cellSize * size;
 
-    mazeCanvas.width = canvasWidth;
-    mazeCanvas.height = canvasHeight;
-    drawCanvas.width = canvasWidth;
-    drawCanvas.height = canvasHeight;
-    bufferCanvas.width = canvasWidth;
-    bufferCanvas.height = canvasHeight;
+        mazeCanvas.width = canvasWidth;
+        mazeCanvas.height = canvasHeight;
+        drawCanvas.width = canvasWidth;
+        drawCanvas.height = canvasHeight;
+        bufferCanvas.width = canvasWidth;
+        bufferCanvas.height = canvasHeight;
 
-    mazeCtx.fillStyle = "white";
-    mazeCtx.fillRect(0, 0, canvasWidth, canvasHeight);
-    mazeCtx.fillStyle = "#FF5252"; mazeCtx.fillRect(0, 0, cellSize, cellSize);
-    mazeCtx.fillStyle = "#448AFF"; mazeCtx.fillRect((size - 1) * cellSize, (size - 1) * cellSize, cellSize, cellSize);
+        mazeCtx.fillStyle = "white";
+        mazeCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+        mazeCtx.fillStyle = "#FF5252";
+        mazeCtx.fillRect(0, 0, cellSize, cellSize);
+        mazeCtx.fillStyle = "#448AFF";
+        mazeCtx.fillRect(mazeEndPoint.x * cellSize, mazeEndPoint.y * cellSize, cellSize, cellSize);
 
-    mazeCtx.strokeStyle = "#333";
-    mazeCtx.lineWidth = 2;
-    mazeCtx.beginPath();
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const cell = grid[y][x];
-        const px = x * cellSize; const py = y * cellSize;
-        if (cell.top) { mazeCtx.moveTo(px, py); mazeCtx.lineTo(px + cellSize, py); }
-        if (cell.left) { mazeCtx.moveTo(px, py); mazeCtx.lineTo(px, py + cellSize); }
-        if (cell.bottom) { mazeCtx.moveTo(px, py + cellSize); mazeCtx.lineTo(px + cellSize, py + cellSize); }
-        if (cell.right) { mazeCtx.moveTo(px + cellSize, py); mazeCtx.lineTo(px + cellSize, py + cellSize); }
-      }
+        mazeCtx.strokeStyle = "#333";
+        mazeCtx.lineWidth = 2;
+        mazeCtx.beginPath();
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const cell = grid[y][x];
+                const px = x * cellSize;
+                const py = y * cellSize;
+                if (cell.top) {
+                    mazeCtx.moveTo(px, py);
+                    mazeCtx.lineTo(px + cellSize, py);
+                }
+                if (cell.left) {
+                    mazeCtx.moveTo(px, py);
+                    mazeCtx.lineTo(px, py + cellSize);
+                }
+                if (cell.bottom) {
+                    mazeCtx.moveTo(px, py + cellSize);
+                    mazeCtx.lineTo(px + cellSize, py + cellSize);
+                }
+                if (cell.right) {
+                    mazeCtx.moveTo(px + cellSize, py);
+                    mazeCtx.lineTo(px + cellSize, py + cellSize);
+                }
+            }
+        }
+        mazeCtx.stroke();
     }
-    mazeCtx.stroke();
-  }
 
-  function saveSession() {
-    sessionStorage.setItem('mazeSession', JSON.stringify({ size: currentSize, grid: mazeGrid, paths: savedPaths }));
-  }
-
-  function loadSession() {
-    const dataStr = sessionStorage.getItem('mazeSession');
-    if (dataStr) {
-      const data = JSON.parse(dataStr);
-      currentSize = data.size; mazeGrid = data.grid; savedPaths = data.paths || [];
-      document.getElementById('maze-size').value = currentSize;
-      return true;
+    function saveSession() {
+        sessionStorage.setItem('mazeSession',
+            JSON.stringify({size: currentSize, grid: mazeGrid, paths: savedPaths, endPoint: mazeEndPoint}));
     }
-    return false;
-  }
 
-  function restoreDrawing() {
-    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-    const w = drawCanvas.width; const h = drawCanvas.height;
-    savedPaths.forEach(path => {
-      drawCtx.beginPath(); drawCtx.lineCap = 'round'; drawCtx.lineJoin = 'round';
-      if (path.mode === 'eraser') { drawCtx.globalCompositeOperation = 'destination-out'; drawCtx.globalAlpha = 1.0; drawCtx.lineWidth = 20; }
-      else {
-        drawCtx.globalCompositeOperation = 'source-over';
-        drawCtx.strokeStyle = path.color;
-        drawCtx.globalAlpha = currentOpacity;
-        let lw = (w / currentSize) * 0.2;
-        drawCtx.lineWidth = lw < 1 ? 1 : lw;
-      }
-      if (path.points.length > 0) {
-        drawCtx.moveTo(path.points[0].x * w, path.points[0].y * h);
-        for (let i = 1; i < path.points.length; i++) { drawCtx.lineTo(path.points[i].x * w, path.points[i].y * h); }
-        drawCtx.stroke();
-      }
+    function loadSession() {
+        const dataStr = sessionStorage.getItem('mazeSession');
+        if (dataStr) {
+            const data = JSON.parse(dataStr);
+            currentSize = data.size;
+            mazeGrid = data.grid;
+            mazeEndPoint = data.endPoint || { x: currentSize - 1, y: currentSize - 1 };
+            savedPaths = data.paths || [];
+            document.getElementById('maze-size').value = currentSize;
+            return true;
+        }
+        return false;
+    }
+
+    function restoreDrawing() {
+        drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        const w = drawCanvas.width;
+        const h = drawCanvas.height;
+        savedPaths.forEach(path => {
+            drawCtx.beginPath();
+            drawCtx.lineCap = 'round';
+            drawCtx.lineJoin = 'round';
+            if (path.mode === 'eraser') {
+                drawCtx.globalCompositeOperation = 'destination-out';
+                drawCtx.globalAlpha = 1.0;
+                drawCtx.lineWidth = 20;
+            } else {
+                drawCtx.globalCompositeOperation = 'source-over';
+                drawCtx.strokeStyle = path.color;
+                drawCtx.globalAlpha = currentOpacity;
+                let lw = (w / currentSize) * 0.2;
+                drawCtx.lineWidth = lw < 1 ? 1 : lw;
+            }
+            if (path.points.length > 0) {
+                drawCtx.moveTo(path.points[0].x * w, path.points[0].y * h);
+                for (let i = 1; i < path.points.length; i++) {
+                    drawCtx.lineTo(path.points[i].x * w, path.points[i].y * h);
+                }
+                drawCtx.stroke();
+            }
+        });
+    }
+
+    function initApp() {
+        if (loadSession()) {
+            drawMaze(mazeGrid, currentSize);
+            restoreDrawing();
+        } else {
+            generateNewMaze();
+        }
+    }
+
+    function generateNewMaze() {
+        let size = parseInt(document.getElementById('maze-size').value) || 30;
+        currentSize = Math.max(5, Math.min(100, size));
+        //mazeGrid = generateMazeGrid(currentSize);
+        const mazeData = generateMazeGrid(currentSize);
+        console.log(`종료 지점 좌표: x=${mazeData.endPoint.x}, y=${mazeData.endPoint.y}`);
+        console.log(`출발지점으로부터의 거리: ${mazeData.maxDistance}칸`);
+        mazeGrid = mazeData.grid;
+        mazeEndPoint = isEasyMode ? {x : currentSize - 1, y : currentSize - 1} : mazeData.endPoint;
+        savedPaths = [];
+        drawMaze(mazeGrid, currentSize);
+        drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        saveSession();
+    }
+
+    let savedImageData = null;
+
+    function getPos(e) {
+        const rect = drawCanvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {x: clientX - rect.left, y: clientY - rect.top};
+    }
+
+    function startDraw(e) {
+        if (e.cancelable) e.preventDefault();
+        isDrawing = true;
+        const pos = getPos(e);
+        currentPath = {
+            mode: mode,
+            color: currentRGB,
+            points: [{x: pos.x / drawCanvas.width, y: pos.y / drawCanvas.height}]
+        };
+        if (mode === 'pen') {
+            drawCtx.globalCompositeOperation = 'source-over';
+            savedImageData = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
+            bufferCtx.clearRect(0, 0, bufferCanvas.width, bufferCanvas.height);
+            bufferCtx.beginPath();
+            bufferCtx.moveTo(pos.x, pos.y);
+            bufferCtx.lineCap = 'round';
+            bufferCtx.lineJoin = 'round';
+            bufferCtx.strokeStyle = currentRGB;
+            let lw = (drawCanvas.width / currentSize) * 0.2;
+            bufferCtx.lineWidth = lw < 1 ? 1 : lw;
+        } else {
+            drawCtx.beginPath();
+            drawCtx.moveTo(pos.x, pos.y);
+        }
+        draw(e);
+    }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        const pos = getPos(e);
+        currentPath.points.push({x: pos.x / drawCanvas.width, y: pos.y / drawCanvas.height});
+        if (mode === 'pen') {
+            bufferCtx.lineTo(pos.x, pos.y);
+            bufferCtx.stroke();
+            drawCtx.putImageData(savedImageData, 0, 0);
+            drawCtx.save();
+            drawCtx.globalAlpha = currentOpacity;
+            drawCtx.drawImage(bufferCanvas, 0, 0);
+            drawCtx.restore();
+        } else {
+            drawCtx.globalCompositeOperation = 'destination-out';
+            drawCtx.lineWidth = 20;
+            drawCtx.lineCap = 'round';
+            drawCtx.lineTo(pos.x, pos.y);
+            drawCtx.stroke();
+            drawCtx.beginPath();
+            drawCtx.moveTo(pos.x, pos.y);
+        }
+    }
+
+    function stopDraw() {
+        if (!isDrawing) return;
+        isDrawing = false;
+        savedPaths.push(currentPath);
+        saveSession();
+    }
+
+    drawCanvas.addEventListener('mousedown', startDraw);
+    drawCanvas.addEventListener('mousemove', draw);
+    drawCanvas.addEventListener('mouseup', stopDraw);
+    drawCanvas.addEventListener('touchstart', startDraw, {passive: false});
+    drawCanvas.addEventListener('touchmove', draw, {passive: false});
+    drawCanvas.addEventListener('touchend', stopDraw);
+
+    function setColor(element) {
+        setMode('pen');
+        currentRGB = element.dataset.color;
+        document.querySelectorAll('.color-dot').forEach(el => el.classList.remove('active'));
+        element.classList.add('active');
+    }
+
+    function setMode(newMode) {
+        mode = newMode;
+        document.getElementById('btn-pen').classList.toggle('active', mode === 'pen');
+        document.getElementById('btn-eraser').classList.toggle('active', mode === 'eraser');
+    }
+
+    function resetAll() {
+        if (confirm('지울까요?')) {
+            savedPaths = [];
+            drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+            saveSession();
+        }
+    }
+
+    function downloadImage() {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = mazeCanvas.width;
+        tempCanvas.height = mazeCanvas.height;
+        const tCtx = tempCanvas.getContext('2d');
+        tCtx.fillStyle = "white";
+        tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        tCtx.drawImage(mazeCanvas, 0, 0);
+        tCtx.drawImage(drawCanvas, 0, 0);
+        const link = document.createElement('a');
+        link.download = `maze.png`;
+        link.href = tempCanvas.toDataURL();
+        link.click();
+    }
+
+    // HTML에서 스위치 요소를 가져옵니다.
+    const easyToggle = document.getElementById('easyModeToggle');
+
+    // 스위치의 상태가 변할 때마다(change) 실행될 함수를 연결합니다.
+    easyToggle.addEventListener('change', function() {
+        const menuText = document.querySelector('.menu-text');
+        if (this.checked) {
+            console.log("하드 코어 모드!");
+            isEasyMode = false;
+            if (menuText) menuText.textContent = '😝';
+        } else {
+            console.log("이지 모드가 켜졌습니다!");
+            isEasyMode = true;
+            if (menuText) menuText.textContent = '😄';
+        }
     });
-  }
 
-  function initApp() { if (loadSession()) { drawMaze(mazeGrid, currentSize); restoreDrawing(); } else { generateNewMaze(); } }
-
-  function generateNewMaze() {
-    let size = parseInt(document.getElementById('maze-size').value) || 30;
-    currentSize = Math.max(5, Math.min(100, size));
-    mazeGrid = generateMazeGrid(currentSize);
-    savedPaths = [];
-    drawMaze(mazeGrid, currentSize);
-    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-    saveSession();
-  }
-
-  let savedImageData = null;
-  function getPos(e) {
-    const rect = drawCanvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
-  }
-
-  function startDraw(e) {
-    if (e.cancelable) e.preventDefault();
-    isDrawing = true;
-    const pos = getPos(e);
-    currentPath = { mode: mode, color: currentRGB, points: [{ x: pos.x / drawCanvas.width, y: pos.y / drawCanvas.height }] };
-    if (mode === 'pen') {
-      drawCtx.globalCompositeOperation = 'source-over';
-      savedImageData = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
-      bufferCtx.clearRect(0, 0, bufferCanvas.width, bufferCanvas.height);
-      bufferCtx.beginPath(); bufferCtx.moveTo(pos.x, pos.y);
-      bufferCtx.lineCap = 'round'; bufferCtx.lineJoin = 'round'; bufferCtx.strokeStyle = currentRGB;
-      let lw = (drawCanvas.width / currentSize) * 0.2;
-      bufferCtx.lineWidth = lw < 1 ? 1 : lw;
-    } else { drawCtx.beginPath(); drawCtx.moveTo(pos.x, pos.y); }
-    draw(e);
-  }
-
-  function draw(e) {
-    if (!isDrawing) return;
-    const pos = getPos(e);
-    currentPath.points.push({ x: pos.x / drawCanvas.width, y: pos.y / drawCanvas.height });
-    if (mode === 'pen') {
-      bufferCtx.lineTo(pos.x, pos.y); bufferCtx.stroke();
-      drawCtx.putImageData(savedImageData, 0, 0);
-      drawCtx.save(); drawCtx.globalAlpha = currentOpacity; drawCtx.drawImage(bufferCanvas, 0, 0); drawCtx.restore();
-    } else {
-      drawCtx.globalCompositeOperation = 'destination-out'; drawCtx.lineWidth = 20; drawCtx.lineCap = 'round'; drawCtx.lineTo(pos.x, pos.y); drawCtx.stroke();
-      drawCtx.beginPath(); drawCtx.moveTo(pos.x, pos.y);
-    }
-  }
-
-  function stopDraw() {
-    if (!isDrawing) return;
-    isDrawing = false;
-    savedPaths.push(currentPath); saveSession();
-  }
-
-  drawCanvas.addEventListener('mousedown', startDraw); drawCanvas.addEventListener('mousemove', draw); drawCanvas.addEventListener('mouseup', stopDraw);
-  drawCanvas.addEventListener('touchstart', startDraw, { passive: false }); drawCanvas.addEventListener('touchmove', draw, { passive: false }); drawCanvas.addEventListener('touchend', stopDraw);
-
-  function setColor(element) { setMode('pen'); currentRGB = element.dataset.color; document.querySelectorAll('.color-dot').forEach(el => el.classList.remove('active')); element.classList.add('active'); }
-  function setMode(newMode) { mode = newMode; document.getElementById('btn-pen').classList.toggle('active', mode === 'pen'); document.getElementById('btn-eraser').classList.toggle('active', mode === 'eraser'); }
-  function resetAll() { if(confirm('지울까요?')) { savedPaths = []; drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height); saveSession(); } }
-
-  function downloadImage() {
-    const tempCanvas = document.createElement('canvas'); tempCanvas.width = mazeCanvas.width; tempCanvas.height = mazeCanvas.height;
-    const tCtx = tempCanvas.getContext('2d');
-    tCtx.fillStyle = "white"; tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-    tCtx.drawImage(mazeCanvas, 0, 0); tCtx.drawImage(drawCanvas, 0, 0);
-    const link = document.createElement('a'); link.download = `maze.png`; link.href = tempCanvas.toDataURL(); link.click();
-  }
-
-  window.addEventListener('resize', () => { if (mazeGrid.length > 0) { drawMaze(mazeGrid, currentSize); restoreDrawing(); } });
-  window.onload = initApp;
+    window.addEventListener('resize', () => {
+        if (mazeGrid.length > 0) {
+            drawMaze(mazeGrid, currentSize);
+            restoreDrawing();
+        }
+    });
+    window.onload = initApp;
 </script>
 </body>
 </html>
