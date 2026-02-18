@@ -81,7 +81,13 @@ function generateNewMaze() {
     let sizeInput = parseInt(document.getElementById('maze-size').value) || 30;
     // 동심원은 그리드보다 작게 시작해도 큼 (반지름이므로)
     let minSize = (shapeSelect.value === 'polar') ? 5 : ((shapeSelect.value !== 'square') ? 15 : 10);
-    state.currentSize = Math.max(minSize, Math.min(100, sizeInput));
+    let maxSize = 100;
+    if (shapeSelect.value === 'triangle') {
+        maxSize = 50;
+    } else if (shapeSelect.value === 'polar') {
+        maxSize = 60;
+    }
+    state.currentSize = Math.max(minSize, Math.min(maxSize, sizeInput));
     document.getElementById('maze-size').value = state.currentSize;
 
     state.currentShape = shapeSelect.value;
@@ -107,7 +113,8 @@ function generateNewMaze() {
             state.mazeEndPoint = { x: state.currentSize-1, y: state.currentSize-1 };
             console.log('square endPoint', state.mazeEndPoint);
         } else if (state.currentShape === 'circle') {
-            state.mazeEndPoint = { x: state.mazeStartPoint.x, y: state.currentSize-2 };
+            const padding = state.currentSize > 81 ? 4 : state.currentSize > 41 ? 3 : 2;
+            state.mazeEndPoint = { x: state.mazeStartPoint.x, y: state.currentSize-padding };
         } else if (state.currentShape === 'triangle') {
             state.mazeEndPoint = { x: state.mazeStartPoint.x, y: state.currentSize-3 };
         } else {
@@ -219,7 +226,7 @@ function drawRadialMaze(rows, ringCount, shape) {
     }
 
     mazeCtx.strokeStyle = "#333";
-    mazeCtx.lineWidth = 2;
+    mazeCtx.lineWidth = 1;
     mazeCtx.lineCap = 'round';
 
     // 3. 벽 그리기
@@ -643,7 +650,7 @@ function drawMaze(grid, size, shape) {
     }
 
     mazeCtx.strokeStyle = "#333";
-    mazeCtx.lineWidth = 2;
+    mazeCtx.lineWidth = 1;
     mazeCtx.beginPath();
 
     // [수정] 벽 그리기 반복문도 안전하게 변경
