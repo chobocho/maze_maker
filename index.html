@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Chobocho's 미로 생성기 V0.2 (Refactored)</title>
+    <title>Chobocho's 미로 생성기 V0.3a (Shapes)</title>
     <link rel="stylesheet" href="style.css">
     <script src="maze.js" defer></script>
     <script src="app.js" defer></script>
@@ -11,7 +11,7 @@
 <body>
 
 <div class="controls">
-    <div class="menu-container" title="난이도 조절 버튼">
+    <div class="menu-container" title="난이도 조절 버튼 (쉬움/어려움)">
         <span class="menu-text">😄</span>
         <label class="toggle-switch">
             <input type="checkbox" id="easyModeToggle">
@@ -19,7 +19,13 @@
         </label>
     </div>
     <div class="group">
-        <input type="number" id="maze-size" value="30" min="5" max="100" title="미로 크기 설정 5 ~ 100" placeholder="크기">
+        <select id="maze-shape" title="미로 모양 선택">
+            <option value="polar">🌀 동심원</option>
+            <option value="square">⬛ 사각</option>
+            <option value="circle">⚫ 원형</option>
+            <option value="triangle">🔺 삼각</option>
+        </select>
+        <input type="number" id="maze-size" value="30" min="15" max="100" title="미로 크기 설정 10 ~ 100 (원/삼각은 최소 15 권장)" placeholder="크기">
         <button class="primary" id="btn-new-maze">새 미로</button>
     </div>
 

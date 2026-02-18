@@ -41,6 +41,15 @@ body {
     border-right: none;
 }
 
+/* Select 박스 스타일 추가 */
+select {
+    padding: 6px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+    cursor: pointer;
+}
+
 input[type="number"] {
     width: 45px;
     padding: 6px;
@@ -133,6 +142,8 @@ canvas {
 #maze-layer {
     z-index: 1;
     background-color: white;
+    /* 모양에 따라 캔버스 자체도 잘라내기 위해 clip-path 사용 예정 (JS에서 제어) */
+    transition: clip-path 0.3s ease;
 }
 
 #draw-layer {
@@ -145,6 +156,7 @@ canvas {
     align-items: center;
     gap: 10px;
     font-family: sans-serif;
+    cursor: pointer; /* 추가 */
 }
 
 .menu-text {
@@ -159,6 +171,7 @@ canvas {
     display: inline-block;
     width: 50px;
     height: 26px;
+    flex-shrink: 0; /* 추가 */
 }
 
 .toggle-switch input {

@@ -6,6 +6,7 @@ const drawCtx = drawCanvas.getContext('2d', {willReadFrequently: true});
 const wrapper = document.getElementById('canvas-wrapper');
 const bufferCanvas = document.createElement('canvas');
 const bufferCtx = bufferCanvas.getContext('2d');
+const shapeSelect = document.getElementById('maze-shape'); // 모양 선택 엘리먼트
 
 // 상태 변수
 let state = {
@@ -15,8 +16,10 @@ let state = {
     currentRGB: '#000000',
     currentOpacity: 0.5,
     mazeGrid: [],
+    mazeStartPoint: {},
     mazeEndPoint: {},
     currentSize: 30,
+    currentShape: 'square', // 현재 모양 상태
     savedPaths: [],
     currentPath: null,
     savedImageData: null
@@ -24,6 +27,10 @@ let state = {
 
 // --- 초기화 및 이벤트 리스너 등록 ---
 document.addEventListener('DOMContentLoaded', () => {
+    // 초기 난이도 UI 동기화
+    document.getElementById('easyModeToggle').checked = !state.isEasyMode;
+    toggleDifficulty({target: document.getElementById('easyModeToggle')});
+
     initApp();
     setupEventListeners();
 });
@@ -36,9 +43,13 @@ function setupEventListeners() {
     drawCanvas.addEventListener('touchstart', startDraw, {passive: false});
     drawCanvas.addEventListener('touchmove', draw, {passive: false});
     drawCanvas.addEventListener('touchend', stopDraw);
+    drawCanvas.addEventListener('mouseleave', stopDraw); // 마우스가 캔버스 밖으로 나갔을 때 처리
 
-    // 버튼 이벤트
+    // 버튼 및 입력 이벤트
     document.getElementById('btn-new-maze').addEventListener('click', generateNewMaze);
+    // 모양 변경 시 자동 새 미로 생성 (선택사항)
+    shapeSelect.addEventListener('change', generateNewMaze);
+
     document.getElementById('btn-pen').addEventListener('click', () => setMode('pen'));
     document.getElementById('btn-eraser').addEventListener('click', () => setMode('eraser'));
     document.getElementById('btn-reset').addEventListener('click', resetAll);
@@ -51,111 +62,308 @@ function setupEventListeners() {
 
     // 난이도 토글
     document.getElementById('easyModeToggle').addEventListener('change', toggleDifficulty);
-
-    // 윈도우 리사이즈
-    window.addEventListener('resize', () => {
-        if (state.mazeGrid.length > 0) {
-            drawMaze(state.mazeGrid, state.currentSize);
-            restoreDrawing();
-        }
-    });
 }
 
 // --- 핵심 로직 ---
 
 function initApp() {
     if (loadSession()) {
-        drawMaze(state.mazeGrid, state.currentSize);
+        drawMaze(state.mazeGrid, state.currentSize, state.currentShape);
         restoreDrawing();
     } else {
         generateNewMaze();
     }
 }
 
+// --- 핵심 로직 부분 수정 ---
+
 function generateNewMaze() {
     let sizeInput = parseInt(document.getElementById('maze-size').value) || 30;
-    state.currentSize = Math.max(5, Math.min(100, sizeInput));
+    // 동심원은 그리드보다 작게 시작해도 큼 (반지름이므로)
+    let minSize = (shapeSelect.value === 'polar') ? 5 : ((shapeSelect.value !== 'square') ? 15 : 10);
+    state.currentSize = Math.max(minSize, Math.min(100, sizeInput));
+    document.getElementById('maze-size').value = state.currentSize;
 
-    // MazeGenerator 사용 (maze.js)
-    const mazeData = MazeGenerator.generate(state.currentSize);
+    state.currentShape = shapeSelect.value;
 
-    console.log(`목표: (${mazeData.endPoint.x}, ${mazeData.endPoint.y}), 거리: ${mazeData.maxDistance}`);
+    const mazeData = MazeGenerator.generate(state.currentSize, state.currentShape);
 
-    state.mazeGrid = mazeData.grid;
-    // 이지 모드면 우측 하단, 하드 모드면 가장 먼 곳
-    state.mazeEndPoint = state.isEasyMode
-        ? {x: state.currentSize - 1, y: state.currentSize - 1}
-        : mazeData.endPoint;
+    console.log(`모양: ${mazeData.shape}, 목표: ${mazeData.maxDistance}`);
+
+    state.mazeGrid = mazeData.grid; // Grid 혹은 Polar Rows
+    state.mazeType = mazeData.type; // 'grid' 또는 'polar'
+    state.mazeStartPoint = mazeData.startPoint;
+
+    if (!state.isEasyMode) {
+        state.mazeEndPoint = mazeData.endPoint;
+    } else {
+        console.log('mazeType: ', state.mazeType);
+        if (state.mazeType === 'polar') {
+            // 동심원 Easy 모드: 그냥 마지막 링의 임의의 지점
+            let lastRow = state.mazeGrid[state.mazeGrid.length-1];
+            let endCell = lastRow[Math.floor(lastRow.length/2)];
+            state.mazeEndPoint = { r: endCell.r, i: endCell.i };
+        } else if (state.currentShape === 'square') {
+            state.mazeEndPoint = { x: state.currentSize-1, y: state.currentSize-1 };
+            console.log('square endPoint', state.mazeEndPoint);
+        } else if (state.currentShape === 'circle') {
+            state.mazeEndPoint = { x: state.mazeStartPoint.x, y: state.currentSize-2 };
+        } else if (state.currentShape === 'triangle') {
+            state.mazeEndPoint = { x: state.mazeStartPoint.x, y: state.currentSize-3 };
+        } else {
+            state.mazeEndPoint = mazeData.endPoint;
+        }
+    }
 
     state.savedPaths = [];
 
-    drawMaze(state.mazeGrid, state.currentSize);
+    // 그리기 분기
+    renderMaze();
     drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
     saveSession();
 }
 
-function drawMaze(grid, size) {
-    const maxWidth = wrapper.clientWidth - 40;
-    const maxHeight = wrapper.clientHeight - 40;
-    const cellSize = Math.floor(Math.min(maxWidth / size, maxHeight / size));
-    const canvasWidth = cellSize * size;
-    const canvasHeight = cellSize * size;
+function renderMaze() {
+    if (state.mazeType === 'polar') {
+        drawPolarMaze(state.mazeGrid, state.currentSize);
+    } else {
+        drawMaze(state.mazeGrid, state.currentSize, state.currentShape);
+    }
+}
 
-    // 캔버스 사이즈 조정
+// [신규] 동심원 그리기 함수
+function drawPolarMaze(rows, ringCount) {
+    if (!rows || !rows.length) return;
+
+    // 캔버스 크기 및 중앙 계산
+    const padding = 20;
+    const minDimension = Math.min(wrapper.clientWidth, wrapper.clientHeight) - (padding * 2);
+    const canvasSize = minDimension + (padding * 2);
+
     [mazeCanvas, drawCanvas, bufferCanvas].forEach(canvas => {
-        canvas.width = canvasWidth;
-        canvas.height = canvasHeight;
+        canvas.width = canvasSize;
+        canvas.height = canvasSize;
     });
 
-    // 배경 및 시작/끝점 그리기
-    mazeCtx.fillStyle = "white";
-    mazeCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+    // 클리핑 해제 (동심원은 그 자체로 원형)
+    mazeCanvas.style.clipPath = 'none';
 
-    // 시작점 (빨강)
-    mazeCtx.fillStyle = "#FF5252";
-    mazeCtx.fillRect(0, 0, cellSize, cellSize);
+    const cx = canvasSize / 2;
+    const cy = canvasSize / 2;
+    // 반지름 간격 (가장 바깥 링이 캔버스에 꽉 차도록)
+    const ringWidth = (minDimension / 2) / ringCount;
 
-    // 도착점 (파랑)
-    mazeCtx.fillStyle = "#448AFF";
-    mazeCtx.fillRect(state.mazeEndPoint.x * cellSize, state.mazeEndPoint.y * cellSize, cellSize, cellSize);
+    mazeCtx.fillStyle = "white"; // 배경 투명/흰색
+    mazeCtx.fillRect(0, 0, canvasSize, canvasSize);
 
-    // 미로 벽 그리기
-    mazeCtx.strokeStyle = "#333";
-    mazeCtx.lineWidth = 2;
+    // 1. 시작점(중심) 색칠
     mazeCtx.beginPath();
+    mazeCtx.arc(cx, cy, ringWidth * 0.6, 0, 2 * Math.PI);
+    mazeCtx.fillStyle = "#FF5252"; // Start Color
+    mazeCtx.fill();
 
-    for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-            const cell = grid[y][x];
-            const px = x * cellSize;
-            const py = y * cellSize;
+    // 2. 도착점 색칠
+    if (state.mazeEndPoint) {
+        const er = state.mazeEndPoint.r;
+        const ei = state.mazeEndPoint.i;
+        if (er > 0) {
+            const cellCount = rows[er].length;
+            const theta = (2 * Math.PI) / cellCount;
+            const angleStart = ei * theta;
+            const angleEnd = (ei + 1) * theta;
+            const innerR = er * ringWidth;
+            const outerR = (er + 1) * ringWidth;
 
-            if (cell.top) { mazeCtx.moveTo(px, py); mazeCtx.lineTo(px + cellSize, py); }
-            if (cell.left) { mazeCtx.moveTo(px, py); mazeCtx.lineTo(px, py + cellSize); }
-            if (cell.bottom) { mazeCtx.moveTo(px, py + cellSize); mazeCtx.lineTo(px + cellSize, py + cellSize); }
-            if (cell.right) { mazeCtx.moveTo(px + cellSize, py); mazeCtx.lineTo(px + cellSize, py + cellSize); }
+            mazeCtx.beginPath();
+            mazeCtx.arc(cx, cy, outerR, angleStart, angleEnd, false);
+            mazeCtx.arc(cx, cy, innerR, angleEnd, angleStart, true);
+            mazeCtx.closePath();
+            mazeCtx.fillStyle = "#448AFF"; // End Color
+            mazeCtx.fill();
         }
     }
+
+    mazeCtx.strokeStyle = "#333";
+    mazeCtx.lineWidth = 2;
+    mazeCtx.lineCap = 'round';
+
+    // 3. 벽 그리기
+    for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        const cellCount = row.length;
+        const theta = (2 * Math.PI) / cellCount;
+        const innerRadius = r * ringWidth;
+        const outerRadius = (r + 1) * ringWidth;
+
+        for (let i = 0; i < cellCount; i++) {
+            const cell = row[i];
+            const angleStart = i * theta;
+            const angleEnd = (i + 1) * theta;
+
+            mazeCtx.beginPath();
+
+            // In Wall (안쪽 벽) - r=0은 그리지 않음
+            if (r > 0 && cell.in) {
+                mazeCtx.arc(cx, cy, innerRadius, angleStart, angleEnd);
+                mazeCtx.stroke();
+            }
+
+            // CW Wall (시계방향 벽 = 오른쪽 벽)
+            if (r > 0 && cell.cw) {
+                // 원주상의 좌표 계산
+                const p1x = cx + Math.cos(angleEnd) * innerRadius;
+                const p1y = cy + Math.sin(angleEnd) * innerRadius;
+                const p2x = cx + Math.cos(angleEnd) * outerRadius;
+                const p2y = cy + Math.sin(angleEnd) * outerRadius;
+
+                mazeCtx.moveTo(p1x, p1y);
+                mazeCtx.lineTo(p2x, p2y);
+                mazeCtx.stroke();
+            }
+        }
+    }
+
+    // 가장 바깥 테두리 그리기
+    mazeCtx.beginPath();
+    mazeCtx.arc(cx, cy, rows.length * ringWidth, 0, 2 * Math.PI);
     mazeCtx.stroke();
 }
 
-// --- 드로잉 로직 ---
+// 4. 리사이즈 이벤트 수정 (renderMaze 호출)
+window.addEventListener('resize', () => {
+    if (state.mazeGrid) { // length check 제거 (객체일수도, 배열일수도)
+        clearTimeout(window.resizeTimer);
+        window.resizeTimer = setTimeout(() => {
+            renderMaze(); // 통합 렌더링 함수 호출
+            restoreDrawing();
+        }, 200);
+    }
+});
+
+// 5. downloadImage 수정 (동심원 클리핑 로직 추가)
+function downloadImage() {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = mazeCanvas.width;
+    tempCanvas.height = mazeCanvas.height;
+    const tCtx = tempCanvas.getContext('2d');
+
+    tCtx.fillStyle = "#e0e0e0";
+    tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+    tCtx.save();
+    tCtx.beginPath();
+
+    // [수정] 클리핑 로직 분기
+    if (state.currentShape === 'polar') {
+        // 동심원은 그냥 전체 원형
+        const r = tempCanvas.width / 2 - 2; // 약간 여유
+        tCtx.arc(tempCanvas.width/2, tempCanvas.height/2, r, 0, Math.PI*2);
+    } else if (state.currentShape === 'circle') {
+        tCtx.ellipse(tempCanvas.width/2, tempCanvas.height/2, tempCanvas.width*0.48, tempCanvas.height*0.48, 0, 0, Math.PI*2);
+    } else if (state.currentShape === 'triangle') {
+        tCtx.moveTo(tempCanvas.width * 0.5, tempCanvas.height * 0.02);
+        tCtx.lineTo(tempCanvas.width * 0.98, tempCanvas.height * 0.96);
+        tCtx.lineTo(tempCanvas.width * 0.02, tempCanvas.height * 0.96);
+        tCtx.closePath();
+    } else {
+        tCtx.rect(0, 0, tempCanvas.width, tempCanvas.height);
+    }
+    tCtx.clip();
+
+    tCtx.fillStyle = "white";
+    tCtx.fill();
+    tCtx.drawImage(mazeCanvas, 0, 0);
+    tCtx.restore();
+
+    tCtx.drawImage(drawCanvas, 0, 0);
+
+    const link = document.createElement('a');
+    link.download = `maze_${state.currentShape}_${state.currentSize}.png`;
+    link.href = tempCanvas.toDataURL('image/png');
+    link.click();
+}
+
+// 6. saveSession 수정 (type 정보 저장 추가)
+function saveSession() {
+    sessionStorage.setItem('mazeSession', JSON.stringify({
+        size: state.currentSize,
+        shape: state.currentShape,
+        type: state.mazeType, // 추가됨
+        grid: state.mazeGrid,
+        start: state.mazeStartPoint,
+        end: state.mazeEndPoint,
+        paths: state.savedPaths,
+        isEasy: state.isEasyMode
+    }));
+}
+
+// 7. loadSession 수정 (type 정보 로드 추가)
+function loadSession() {
+    const dataStr = sessionStorage.getItem('mazeSession');
+    if (dataStr) {
+        try {
+            const data = JSON.parse(dataStr);
+            // 유효성 검사 (Polar는 grid 구조가 다르므로 배열 체크만)
+            if (!data.grid || !Array.isArray(data.grid)) return false;
+
+            state.currentSize = data.size || 30;
+            state.currentShape = data.shape || 'square';
+            state.mazeType = data.type || 'grid'; // 없을 경우 grid 호환
+            state.mazeGrid = data.grid;
+            state.mazeStartPoint = data.start;
+            state.mazeEndPoint = data.end;
+            state.savedPaths = data.paths || [];
+            state.isEasyMode = data.isEasy ?? false;
+
+            document.getElementById('maze-size').value = state.currentSize;
+            document.getElementById('maze-shape').value = state.currentShape;
+
+            const easyToggle = document.getElementById('easyModeToggle');
+            if(easyToggle) {
+                easyToggle.checked = !state.isEasyMode;
+                toggleDifficulty({target: easyToggle});
+            }
+            return true;
+        } catch (e) {
+            console.error(e);
+            sessionStorage.removeItem('mazeSession');
+            return false;
+        }
+    }
+    return false;
+}
+
+// --- 드로잉 로직 (이전과 동일하거나 소폭 수정) ---
 
 function getPos(e) {
     const rect = drawCanvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    // 터치 이벤트 처리 강화
+    let clientX, clientY;
+    if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+        // touchend 이벤트의 경우
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+    }
+    else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+    }
+
     return {x: clientX - rect.left, y: clientY - rect.top};
 }
 
 function startDraw(e) {
-    if (e.cancelable) e.preventDefault();
+    if (e.cancelable && e.type !== 'mousedown') e.preventDefault(); // 마우스 이벤트 제외하고 preventDefault
     state.isDrawing = true;
     const pos = getPos(e);
 
     state.currentPath = {
         mode: state.mode,
         color: state.currentRGB,
+        // 상대 좌표로 저장
         points: [{x: pos.x / drawCanvas.width, y: pos.y / drawCanvas.height}]
     };
 
@@ -170,22 +378,35 @@ function startDraw(e) {
         bufferCtx.lineJoin = 'round';
         bufferCtx.strokeStyle = state.currentRGB;
 
-        let lw = (drawCanvas.width / state.currentSize) * 0.2;
-        bufferCtx.lineWidth = lw < 1 ? 1 : lw;
+        let lw = (drawCanvas.width / state.currentSize) * 0.25; // 선 두께 약간 증가
+        bufferCtx.lineWidth = lw < 2 ? 2 : lw;
     } else {
+        // 지우개
+        drawCtx.globalCompositeOperation = 'destination-out';
+        drawCtx.lineWidth = (drawCanvas.width / state.currentSize) * 1.5; // 지우개 크기 상대적으로 설정
+        drawCtx.lineCap = 'round';
+        drawCtx.lineJoin = 'round';
         drawCtx.beginPath();
         drawCtx.moveTo(pos.x, pos.y);
+        drawCtx.stroke(); // 클릭 시점에도 지워지도록
     }
-    draw(e);
+    // draw(e) 호출 불필요 (mousemove/touchmove에서 처리)
 }
 
 function draw(e) {
     if (!state.isDrawing) return;
+    if (e.cancelable && e.type !== 'mousemove') e.preventDefault();
+
     const pos = getPos(e);
+    // 범위 밖으로 나가면 드로잉 종료 처리
+    if (pos.x < 0 || pos.x > drawCanvas.width || pos.y < 0 || pos.y > drawCanvas.height) {
+        stopDraw(e);
+        return;
+    }
+
     state.currentPath.points.push({x: pos.x / drawCanvas.width, y: pos.y / drawCanvas.height});
 
     if (state.mode === 'pen') {
-        // 버퍼에 먼저 그리고 메인 캔버스에 합성 (투명도 유지 효과)
         bufferCtx.lineTo(pos.x, pos.y);
         bufferCtx.stroke();
 
@@ -195,22 +416,20 @@ function draw(e) {
         drawCtx.drawImage(bufferCanvas, 0, 0);
         drawCtx.restore();
     } else {
-        // 지우개 모드
-        drawCtx.globalCompositeOperation = 'destination-out';
-        drawCtx.lineWidth = 20;
-        drawCtx.lineCap = 'round';
         drawCtx.lineTo(pos.x, pos.y);
         drawCtx.stroke();
-        drawCtx.beginPath();
-        drawCtx.moveTo(pos.x, pos.y);
     }
 }
 
-function stopDraw() {
+function stopDraw(e) {
     if (!state.isDrawing) return;
+    if (e && e.cancelable && e.type !== 'mouseup' && e.type !== 'mouseleave') e.preventDefault();
     state.isDrawing = false;
-    state.savedPaths.push(state.currentPath);
-    saveSession();
+    if (state.currentPath && state.currentPath.points.length > 1) {
+        state.savedPaths.push(state.currentPath);
+        saveSession();
+    }
+    state.currentPath = null;
 }
 
 function restoreDrawing() {
@@ -226,13 +445,13 @@ function restoreDrawing() {
         if (path.mode === 'eraser') {
             drawCtx.globalCompositeOperation = 'destination-out';
             drawCtx.globalAlpha = 1.0;
-            drawCtx.lineWidth = 20;
+            drawCtx.lineWidth = (w / state.currentSize) * 1.5;
         } else {
             drawCtx.globalCompositeOperation = 'source-over';
             drawCtx.strokeStyle = path.color;
             drawCtx.globalAlpha = state.currentOpacity;
-            let lw = (w / state.currentSize) * 0.2;
-            drawCtx.lineWidth = lw < 1 ? 1 : lw;
+            let lw = (w / state.currentSize) * 0.25;
+            drawCtx.lineWidth = lw < 2 ? 2 : lw;
         }
 
         if (path.points.length > 0) {
@@ -243,6 +462,8 @@ function restoreDrawing() {
             drawCtx.stroke();
         }
     });
+    // 드로잉 복구 후 다시 기본 합성 모드로
+    drawCtx.globalCompositeOperation = 'source-over';
 }
 
 // --- 유틸리티 및 UI 핸들러 ---
@@ -250,25 +471,139 @@ function restoreDrawing() {
 function saveSession() {
     sessionStorage.setItem('mazeSession', JSON.stringify({
         size: state.currentSize,
+        shape: state.currentShape,
         grid: state.mazeGrid,
+        start: state.mazeStartPoint,
+        end: state.mazeEndPoint,
         paths: state.savedPaths,
-        endPoint: state.mazeEndPoint
+        isEasy: state.isEasyMode
     }));
 }
 
+// 1. loadSession 함수 교체: 저장된 데이터가 진짜 유효한지 꼼꼼하게 검사합니다.
 function loadSession() {
     const dataStr = sessionStorage.getItem('mazeSession');
     if (dataStr) {
-        const data = JSON.parse(dataStr);
-        state.currentSize = data.size;
-        state.mazeGrid = data.grid;
-        state.mazeEndPoint = data.endPoint || { x: state.currentSize - 1, y: state.currentSize - 1 };
-        state.savedPaths = data.paths || [];
-        document.getElementById('maze-size').value = state.currentSize;
-        return true;
+        try {
+            const data = JSON.parse(dataStr);
+
+            // [수정] 데이터 유효성 검사 강화
+            // 1. grid가 존재해야 함
+            // 2. grid가 배열이어야 함
+            // 3. grid 내용이 비어있으면 안 됨
+            // 4. 저장된 size와 실제 grid 길이가 일치해야 함
+            if (!data.grid || !Array.isArray(data.grid) || data.grid.length === 0 || data.grid.length !== data.size) {
+                console.warn("손상된 세션 데이터 감지. 초기화합니다.");
+                return false;
+            }
+
+            state.currentSize = data.size || 30;
+            state.currentShape = data.shape || 'square';
+            state.mazeGrid = data.grid;
+            state.mazeStartPoint = data.start;
+            state.mazeEndPoint = data.end;
+            state.savedPaths = data.paths || [];
+            state.isEasyMode = data.isEasy ?? false;
+
+            document.getElementById('maze-size').value = state.currentSize;
+            document.getElementById('maze-shape').value = state.currentShape;
+
+            const easyToggle = document.getElementById('easyModeToggle');
+            if (easyToggle) {
+                easyToggle.checked = !state.isEasyMode;
+                toggleDifficulty({target: easyToggle});
+            }
+
+            return true;
+        } catch (e) {
+            console.error("세션 로드 실패:", e);
+            sessionStorage.removeItem('mazeSession');
+            return false;
+        }
     }
     return false;
 }
+
+// 2. drawMaze 함수 교체: 입력된 size 값 대신 실제 grid 배열의 크기를 기준으로 그립니다.
+function drawMaze(grid, size, shape) {
+    // [수정] 방어 코드: 그리드가 없으면 그리지 않고 중단
+    if (!grid || !grid.length) return;
+
+    const maxWidth = wrapper.clientWidth - 40;
+    const maxHeight = wrapper.clientHeight - 40;
+
+    // [수정] size 인자 대신 실제 데이터 길이(grid.length)를 사용하여 계산
+    const realSize = grid.length;
+    const cellSize = Math.floor(Math.min(maxWidth / realSize, maxHeight / realSize));
+    const canvasWidth = cellSize * realSize;
+    const canvasHeight = cellSize * realSize;
+
+    [mazeCanvas, drawCanvas, bufferCanvas].forEach(canvas => {
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+    });
+
+    let clipPath = 'none';
+    if (shape === 'circle') {
+        clipPath = `circle(48% at 50% 50%)`;
+    } else if (shape === 'triangle') {
+        clipPath = `polygon(50% 2%, 98% 96%, 2% 96%)`;
+    }
+    mazeCanvas.style.clipPath = clipPath;
+
+    mazeCtx.fillStyle = "transparent";
+    mazeCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // [수정] 실제 데이터가 있는 만큼만 반복 (안전한 반복문)
+    mazeCtx.fillStyle = "white";
+    for (let y = 0; y < grid.length; y++) {
+        if (!grid[y]) continue; // 행 데이터가 없으면 건너뜀
+
+        for (let x = 0; x < grid[y].length; x++) {
+            const cell = grid[y][x];
+            // cell이 존재하고 isActive일 때만 그림
+            if (cell && cell.isActive) {
+                mazeCtx.fillRect(x * cellSize, y * cellSize, cellSize + 1, cellSize + 1);
+            }
+        }
+    }
+
+    if (state.mazeStartPoint) {
+        mazeCtx.fillStyle = "#FF5252";
+        mazeCtx.fillRect(state.mazeStartPoint.x * cellSize, state.mazeStartPoint.y * cellSize, cellSize, cellSize);
+    }
+
+    if (state.mazeEndPoint) {
+        mazeCtx.fillStyle = "#448AFF";
+        mazeCtx.fillRect(state.mazeEndPoint.x * cellSize, state.mazeEndPoint.y * cellSize, cellSize, cellSize);
+    }
+
+    mazeCtx.strokeStyle = "#333";
+    mazeCtx.lineWidth = 2;
+    mazeCtx.beginPath();
+
+    // [수정] 벽 그리기 반복문도 안전하게 변경
+    for (let y = 0; y < grid.length; y++) {
+        if (!grid[y]) continue;
+
+        for (let x = 0; x < grid[y].length; x++) {
+            const cell = grid[y][x];
+            if (!cell || !cell.isActive) continue;
+
+            const px = x * cellSize;
+            const py = y * cellSize;
+
+            mazeCtx.lineCap = 'square';
+
+            if (cell.top) { mazeCtx.moveTo(px, py); mazeCtx.lineTo(px + cellSize, py); }
+            if (cell.left) { mazeCtx.moveTo(px, py); mazeCtx.lineTo(px, py + cellSize); }
+            if (cell.bottom) { mazeCtx.moveTo(px, py + cellSize); mazeCtx.lineTo(px + cellSize, py + cellSize); }
+            if (cell.right) { mazeCtx.moveTo(px + cellSize, py); mazeCtx.lineTo(px + cellSize, py + cellSize); }
+        }
+    }
+    mazeCtx.stroke();
+}
+
 
 function setMode(newMode) {
     state.mode = newMode;
@@ -284,39 +619,27 @@ function setColor(element) {
 }
 
 function resetAll() {
-    if (confirm('지울까요?')) {
+    if (confirm('그림을 모두 지울까요?')) {
         state.savedPaths = [];
         drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
         saveSession();
     }
 }
 
-function downloadImage() {
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = mazeCanvas.width;
-    tempCanvas.height = mazeCanvas.height;
-    const tCtx = tempCanvas.getContext('2d');
-
-    tCtx.fillStyle = "white";
-    tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-    tCtx.drawImage(mazeCanvas, 0, 0);
-    tCtx.drawImage(drawCanvas, 0, 0);
-
-    const link = document.createElement('a');
-    link.download = `maze_${state.currentSize}x${state.currentSize}.png`;
-    link.href = tempCanvas.toDataURL();
-    link.click();
-}
-
 function toggleDifficulty(e) {
     const menuText = document.querySelector('.menu-text');
+    // 체크박스가 해제되어 있으면 Easy Mode
     state.isEasyMode = !e.target.checked;
+    console.log("Mode: ", state.isEasyMode);
 
     if (state.isEasyMode) {
-        console.log("이지 모드");
-        menuText.textContent = '😄';
+        menuText.textContent = '😄'; // Easy
+        // 이지 모드 로직 (여기서는 시작점 근처가 목표가 되도록 해야 하나,
+        // 기존 로직상 endPoint가 이미 멀리 설정되어 있어 UI 표시만 변경함.
+        // 필요시 generateNewMaze에서 로직 분기 필요)
     } else {
-        console.log("하드 모드");
-        menuText.textContent = '😝';
+        menuText.textContent = '😝'; // Hard
     }
+    // 난이도 변경 시 세션 저장
+    saveSession();
 }

@@ -1,8 +1,17 @@
 /**
- * 미로 생성 알고리즘 (DFS 방식 + 최장 거리 탐색)
+ * 미로 생성 알고리즘 (Square/Masked + Polar)
  */
 const MazeGenerator = {
-    generate(size) {
+    // 메인 진입점
+    generate(size, shape = 'square') {
+        if (shape === 'polar') {
+            return this.generatePolar(size);
+        }
+        return this.generateGrid(size, shape);
+    },
+
+    // 기존 사각/원형/삼각 미로 로직 (이름 변경: generate -> generateGrid)
+    generateGrid(size, shape) {
         let grid = [];
         // 1. 그리드 초기화
         for (let y = 0; y < size; y++) {
@@ -12,14 +21,32 @@ const MazeGenerator = {
                     x, y,
                     top: true, right: true, bottom: true, left: true,
                     visited: false,
-                    isStart: false, isEnd: false
+                    isStart: false, isEnd: false,
+                    isActive: true
                 });
             }
             grid.push(row);
         }
 
+        // 2. 모양 마스크 적용
+        this._applyShapeMask(grid, size, shape);
+
+        // 3. 시작점 찾기
+        let startCell = null;
+        outerLoop: for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                if (grid[y][x].isActive) {
+                    startCell = grid[y][x];
+                    break outerLoop;
+                }
+            }
+        }
+
+        if (!startCell) return this.generateGrid(size, 'square');
+
+        // 4. DFS 탐색
         let stack = [];
-        let current = grid[0][0];
+        let current = startCell;
         current.visited = true;
         current.isStart = true;
         stack.push(current);
@@ -34,11 +61,8 @@ const MazeGenerator = {
         let maxDistance = 0;
         let farthestCell = current;
 
-        // 2. DFS 탐색
         while (stack.length > 0) {
             current = stack[stack.length - 1];
-
-            // 최장 거리 갱신 (Hard 모드용)
             if (stack.length > maxDistance) {
                 maxDistance = stack.length;
                 farthestCell = current;
@@ -48,7 +72,8 @@ const MazeGenerator = {
             for (let d of directions) {
                 let nx = current.x + d.dx;
                 let ny = current.y + d.dy;
-                if (nx >= 0 && nx < size && ny >= 0 && ny < size && !grid[ny][nx].visited) {
+                if (nx >= 0 && nx < size && ny >= 0 && ny < size &&
+                    !grid[ny][nx].visited && grid[ny][nx].isActive) {
                     neighbors.push({cell: grid[ny][nx], dir: d});
                 }
             }
@@ -63,13 +88,173 @@ const MazeGenerator = {
                 stack.pop();
             }
         }
-
         farthestCell.isEnd = true;
 
         return {
             grid: grid,
-            endPoint: { x: farthestCell.x, y: farthestCell.y },
-            maxDistance: maxDistance
+            startPoint: {x: startCell.x, y: startCell.y},
+            endPoint: {x: farthestCell.x, y: farthestCell.y},
+            maxDistance: maxDistance,
+            shape: shape,
+            type: 'grid' // 타입 구분용
         };
+    },
+
+    // --- 🌀 동심원(Polar) 미로 생성 로직 ---
+    generatePolar(size) {
+        // size는 반지름(링의 개수)으로 사용
+        // rows[ringIndex][cellIndex] 구조
+        let rows = [];
+        const centerCell = {
+            r: 0, i: 0,
+            visited: false,
+            in: false, out: true, cw: false, ccw: false, // 중심은 벽 의미가 다름
+            isStart: true
+        };
+        rows.push([centerCell]); // 0번 링(중심)
+
+        // 링 생성 (안쪽 -> 바깥쪽)
+        // 바깥으로 갈수록 셀 개수를 늘려서 적절한 크기 유지 (6의 배수 등)
+        for (let r = 1; r < size; r++) {
+            let prevCount = rows[r - 1].length;
+            // 반지름에 비례하여 셀 개수 설정 (대략 2*PI*r)
+            // 간단하게 ring index * 6 정도로 설정하되, 이전 링의 배수가 되도록 조정
+            let estimated = Math.round(r * 6);
+            // 이전 링 개수의 정수배가 되도록 조정 (부모-자식 연결 쉽게 하기 위해)
+            let ratio = Math.round(estimated / prevCount) || 1;
+            let count = prevCount * ratio;
+
+            let row = [];
+            for (let i = 0; i < count; i++) {
+                row.push({
+                    r: r,
+                    i: i,
+                    visited: false,
+                    in: true,  // 안쪽 벽 (부모 쪽)
+                    cw: true,  // 시계방향 벽
+                    isStart: false,
+                    isEnd: false,
+                    ratio: ratio // 부모 하나당 자식 몇 개인지
+                });
+            }
+            rows.push(row);
+        }
+
+        // DFS 탐색
+        let stack = [];
+        let current = rows[0][0]; // 중심에서 시작
+        current.visited = true;
+        stack.push(current);
+
+        let maxDistance = 0;
+        let farthestCell = current;
+
+        while (stack.length > 0) {
+            current = stack[stack.length - 1];
+            if (stack.length > maxDistance) {
+                maxDistance = stack.length;
+                farthestCell = current;
+            }
+
+            let neighbors = [];
+            const r = current.r;
+            const i = current.i;
+            const rowLen = rows[r].length;
+
+            // 1. Outward (바깥쪽으로)
+            if (r < size - 1) {
+                let nextRowLen = rows[r + 1].length;
+                let ratio = nextRowLen / rowLen;
+                // 현재 셀과 연결된 바깥쪽 셀들 (ratio만큼 존재)
+                for (let k = 0; k < ratio; k++) {
+                    let ni = i * ratio + k;
+                    let target = rows[r + 1][ni];
+                    if (!target.visited) neighbors.push({ cell: target, move: 'out' });
+                }
+            }
+
+            // 2. Inward (안쪽으로) - 중심(r=0)은 제외
+            if (r > 0) {
+                let prevRowLen = rows[r - 1].length;
+                let ratio = rowLen / prevRowLen;
+                let ni = Math.floor(i / ratio);
+                let target = rows[r - 1][ni];
+                // r=1일때는 target이 중심점(0,0) 하나뿐
+                if (!target.visited) neighbors.push({ cell: target, move: 'in' });
+            }
+
+            // 3. Clockwise (시계방향) - r=0 제외
+            if (r > 0) {
+                let ni = (i + 1) % rowLen;
+                let target = rows[r][ni];
+                if (!target.visited) neighbors.push({ cell: target, move: 'cw' });
+            }
+
+            // 4. Counter-Clockwise (반시계방향) - r=0 제외
+            if (r > 0) {
+                let ni = (i - 1 + rowLen) % rowLen;
+                let target = rows[r][ni];
+                if (!target.visited) neighbors.push({ cell: target, move: 'ccw' });
+            }
+
+            if (neighbors.length > 0) {
+                let chosen = neighbors[Math.floor(Math.random() * neighbors.length)];
+                let next = chosen.cell;
+
+                // 벽 뚫기 로직
+                if (chosen.move === 'out') {
+                    // 현재 셀 입장에서는 벽이 없음(개념적), 다음 셀의 In 벽을 뚫음
+                    next.in = false;
+                } else if (chosen.move === 'in') {
+                    current.in = false;
+                } else if (chosen.move === 'cw') {
+                    current.cw = false;
+                } else if (chosen.move === 'ccw') {
+                    next.cw = false; // 상대방의 CW 벽이 내 CCW 벽
+                }
+
+                next.visited = true;
+                stack.push(next);
+            } else {
+                stack.pop();
+            }
+        }
+
+        farthestCell.isEnd = true;
+
+        return {
+            grid: rows, // 여기서는 rows 구조체 반환
+            startPoint: { r: 0, i: 0 },
+            endPoint: { r: farthestCell.r, i: farthestCell.i },
+            maxDistance: maxDistance,
+            shape: 'polar',
+            type: 'polar'
+        };
+    },
+
+    // 내부 함수: 기존 마스크 로직
+    _applyShapeMask(grid, size, shape) {
+        if (shape === 'square') return;
+        const center = (size - 1) / 2;
+        const radius = center * 0.95;
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                let isActive = true;
+                if (shape === 'circle') {
+                    const distSq = (x - center) * (x - center) + (y - center) * (y - center);
+                    isActive = distSq <= radius * radius;
+                } else if (shape === 'triangle') {
+                    const nx = x / (size - 1);
+                    const ny = y / (size - 1);
+                    const bottomEdge = ny <= 0.95;
+                    const leftEdge = ny >= -2 * nx + 1.0;
+                    const rightEdge = ny >= 2 * nx - 1.0;
+                    isActive = bottomEdge && leftEdge && rightEdge;
+                }
+                grid[y][x].isActive = isActive;
+                if (!isActive) grid[y][x].visited = true;
+            }
+        }
     }
 };
