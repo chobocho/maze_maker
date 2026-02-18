@@ -492,8 +492,8 @@ function startDraw(e) {
         bufferCtx.lineJoin = 'round';
         bufferCtx.strokeStyle = state.currentRGB;
 
-        let lw = (drawCanvas.width / state.currentSize) * 0.25; // 선 두께 약간 증가
-        bufferCtx.lineWidth = lw < 2 ? 2 : lw;
+        let lw = (drawCanvas.width / state.currentSize) * 0.15; // 선 두께 약간 증가
+        bufferCtx.lineWidth = lw < 1 ? 1 : lw;
     } else {
         // 지우개
         drawCtx.globalCompositeOperation = 'destination-out';
@@ -564,8 +564,8 @@ function restoreDrawing() {
             drawCtx.globalCompositeOperation = 'source-over';
             drawCtx.strokeStyle = path.color;
             drawCtx.globalAlpha = state.currentOpacity;
-            let lw = (w / state.currentSize) * 0.25;
-            drawCtx.lineWidth = lw < 2 ? 2 : lw;
+            let lw = (w / state.currentSize) * 0.15;
+            drawCtx.lineWidth = lw < 1 ? 1 : lw;
         }
 
         if (path.points.length > 0) {
