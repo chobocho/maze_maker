@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Chobocho's 미로 생성기 V0.2 (Refactored)</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="maze.js" defer></script>
+    <script src="app.js" defer></script>
+</head>
+<body>
+
+<div class="controls">
+    <div class="menu-container" title="난이도 조절 버튼">
+        <span class="menu-text">😄</span>
+        <label class="toggle-switch">
+            <input type="checkbox" id="easyModeToggle">
+            <span class="slider"></span>
+        </label>
+    </div>
+    <div class="group">
+        <input type="number" id="maze-size" value="30" min="5" max="100" title="미로 크기 설정 5 ~ 100" placeholder="크기">
+        <button class="primary" id="btn-new-maze">새 미로</button>
+    </div>
+
+    <div class="group">
+        <div class="color-picker">
+            <div class="color-dot active" style="background: black;" data-color="#000000"></div>
+            <div class="color-dot" style="background: red;" data-color="#FF0000"></div>
+            <div class="color-dot" style="background: blue;" data-color="#0000FF"></div>
+        </div>
+    </div>
+
+    <div class="group">
+        <button id="btn-pen" class="active" title="펜 모드로 변경">✏️</button>
+        <button id="btn-eraser" title="지우개 모드로 변경">🧽</button>
+        <button id="btn-reset" title="그림 모두 지우기">🗑️</button>
+    </div>
+
+    <div class="group" style="border:none;">
+        <button class="download" id="btn-download" title="그림 저장">💾</button>
+    </div>
+</div>
+
+<div id="canvas-wrapper">
+    <canvas id="maze-layer"></canvas>
+    <canvas id="draw-layer"></canvas>
+</div>
+
+</body>
+</html>
