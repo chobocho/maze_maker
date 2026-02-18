@@ -136,6 +136,7 @@ function renderMaze() {
 }
 
 // [통합] Radial Maze 그리기 (원형/삼각형 공용)
+// [수정] Radial Maze 그리기 (크기 및 위치 보정 적용)
 function drawRadialMaze(rows, ringCount, shape) {
     if (!rows || !rows.length) return;
 
@@ -151,12 +152,23 @@ function drawRadialMaze(rows, ringCount, shape) {
     // 클리핑 해제
     mazeCanvas.style.clipPath = 'none';
 
-    const cx = canvasSize / 2;
-    // 삼각형 중심 보정 (무게중심이 시각적으로 중간에 오도록)
-    const cy = shape === 'triangle' ? canvasSize * 0.6 : canvasSize / 2;
+    // --- [핵심 수정 부분] 크기(Scale)와 중심점(Center Y) 보정 ---
+    let scaleFactor = 1.0;
+    let centerYRatio = 0.5;
 
-    // 반지름 간격 계산
-    const ringWidth = (minDimension / 2) / ringCount;
+    if (shape === 'triangle') {
+        // 삼각형은 원에 내접하면 작아 보이므로 1.22배확대
+        scaleFactor = 1.22;
+        // 크기가 커진 만큼 무게중심을 화면 중앙보다 약간 아래(0.6)로 내려서 배치
+        centerYRatio = 0.62;
+    }
+
+    const cx = canvasSize / 2;
+    const cy = canvasSize * centerYRatio;
+
+    // 반지름 간격 계산 (스케일 적용)
+    const ringWidth = ((minDimension / 2) / ringCount) * scaleFactor;
+    // -------------------------------------------------------
 
     mazeCtx.fillStyle = "white";
     mazeCtx.fillRect(0, 0, canvasSize, canvasSize);
@@ -255,7 +267,6 @@ function drawRadialMaze(rows, ringCount, shape) {
     // 가장 바깥 테두리
     mazeCtx.beginPath();
     if (shape === 'triangle') {
-        // 삼각형 외곽선
         const lastRowLen = rows[rows.length-1].length;
         const maxR = rows.length * ringWidth;
         const t1 = getPolyCoordinate(maxR, 0, lastRowLen, cx, cy, shape);
@@ -390,7 +401,17 @@ function loadSession() {
         try {
             const data = JSON.parse(dataStr);
             // 유효성 검사 (Polar는 grid 구조가 다르므로 배열 체크만)
-            if (!data.grid || !Array.isArray(data.grid)) return false;
+            if (!data.grid || !Array.isArray(data.grid) || data.grid.length === 0 || data.grid.length !== data.size) {
+                console.warn("손상된 세션 데이터 감지. 초기화합니다.");
+                if (data.grid.length === 0) {
+                    console.log("세션 데이터의 grid가 비어 있습니다.");
+                }
+                if (data.grid.length !== data.size) {
+                    console.log("세션 데이터의 grid 크기가 size와 일치하지 않습니다.");
+                    console.log(`세션 데이터의 grid 크기: ${data.grid.length}, size: ${data.size}`);
+                }
+                return false;
+            }
 
             state.currentSize = data.size || 30;
             state.currentShape = data.shape || 'square';
@@ -566,49 +587,6 @@ function saveSession() {
     }));
 }
 
-// 1. loadSession 함수 교체: 저장된 데이터가 진짜 유효한지 꼼꼼하게 검사합니다.
-function loadSession() {
-    const dataStr = sessionStorage.getItem('mazeSession');
-    if (dataStr) {
-        try {
-            const data = JSON.parse(dataStr);
-
-            // [수정] 데이터 유효성 검사 강화
-            // 1. grid가 존재해야 함
-            // 2. grid가 배열이어야 함
-            // 3. grid 내용이 비어있으면 안 됨
-            // 4. 저장된 size와 실제 grid 길이가 일치해야 함
-            if (!data.grid || !Array.isArray(data.grid) || data.grid.length === 0 || data.grid.length !== data.size) {
-                console.warn("손상된 세션 데이터 감지. 초기화합니다.");
-                return false;
-            }
-
-            state.currentSize = data.size || 30;
-            state.currentShape = data.shape || 'square';
-            state.mazeGrid = data.grid;
-            state.mazeStartPoint = data.start;
-            state.mazeEndPoint = data.end;
-            state.savedPaths = data.paths || [];
-            state.isEasyMode = data.isEasy ?? false;
-
-            document.getElementById('maze-size').value = state.currentSize;
-            document.getElementById('maze-shape').value = state.currentShape;
-
-            const easyToggle = document.getElementById('easyModeToggle');
-            if (easyToggle) {
-                easyToggle.checked = !state.isEasyMode;
-                toggleDifficulty({target: easyToggle});
-            }
-
-            return true;
-        } catch (e) {
-            console.error("세션 로드 실패:", e);
-            sessionStorage.removeItem('mazeSession');
-            return false;
-        }
-    }
-    return false;
-}
 
 // 2. drawMaze 함수 교체: 입력된 size 값 대신 실제 grid 배열의 크기를 기준으로 그립니다.
 function drawMaze(grid, size, shape) {
