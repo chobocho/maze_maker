@@ -94,8 +94,14 @@ const MazeGenerator = {
         }
         farthestCell.isEnd = true;
 
-        // 임시 반환 (실제 코드엔 전체 로직 필요)
-        return this._runGridDFS(grid, size, shape);
+        return {
+            grid: grid,
+            startPoint: {x: startCell.x, y: startCell.y},
+            endPoint: {x: farthestCell.x, y: farthestCell.y},
+            maxDistance: maxDistance,
+            shape: shape,
+            type: 'grid' // 타입 구분용
+        };
     },
 
     generatePyramid(size) {
@@ -336,47 +342,6 @@ const MazeGenerator = {
             maxDistance: maxDistance,
             shape: shapeName,
             type: 'polar' // 그리기 방식에서 polar 로직 공유 (좌표 계산만 다름)
-        };
-    },
-
-    // 헬퍼: Grid용 DFS (기존 코드 유지용)
-    _runGridDFS(grid, size, shape) {
-        // 기존 generateGrid 내부의 DFS 로직을 그대로 사용하거나
-        // 이전에 작성된 코드를 그대로 두시면 됩니다.
-        // 여기서 핵심은 shape='triangle'일 때 generatePyramid를 호출하는 것입니다.
-        // (생략: 기존 코드와 동일)
-        // 실제 구현시엔 generateGrid 함수 안에 있던 DFS 코드를 그대로 두세요.
-
-        // ... (방어 코드를 위해 간략 버전 삽입)
-        let stack = [];
-        // 시작점 찾기 (마스크 적용 후)
-        let startCell = null;
-        for(let y=0; y<size; y++) {
-            for(let x=0; x<size; x++) {
-                if(grid[y][x].isActive) { startCell = grid[y][x]; break; }
-            }
-            if(startCell) break;
-        }
-        if(!startCell) return { grid: grid, startPoint: {x:0,y:0}, endPoint: {x:0,y:0}, maxDistance:0, shape:shape, type:'grid' };
-
-        startCell.visited = true;
-        startCell.isStart = true;
-        stack.push(startCell);
-
-        let maxDist = 0;
-        let endCell = startCell;
-
-        // ... (DFS 수행) ...
-        // 편의상 이 부분은 기존 코드를 그대로 사용한다고 가정합니다.
-        // 전체 코드를 합칠 때 기존 generateGrid의 뒷부분을 참조하세요.
-
-        return {
-            grid: grid,
-            startPoint: {x: startCell.x, y: startCell.y},
-            endPoint: {x: endCell.x, y: endCell.y}, // DFS 결과값
-            maxDistance: maxDist,
-            shape: shape,
-            type: 'grid'
         };
     },
 
