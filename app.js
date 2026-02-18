@@ -123,19 +123,22 @@ function generateNewMaze() {
     saveSession();
 }
 
+
+// --- app.js 수정 부분 ---
+
 function renderMaze() {
+    // 'polar' 혹은 'triangle' 타입은 Radial 방식의 그리기 함수 사용
     if (state.mazeType === 'polar') {
-        drawPolarMaze(state.mazeGrid, state.currentSize);
+        drawRadialMaze(state.mazeGrid, state.currentSize, state.currentShape);
     } else {
         drawMaze(state.mazeGrid, state.currentSize, state.currentShape);
     }
 }
 
-// [신규] 동심원 그리기 함수
-function drawPolarMaze(rows, ringCount) {
+// [통합] Radial Maze 그리기 (원형/삼각형 공용)
+function drawRadialMaze(rows, ringCount, shape) {
     if (!rows || !rows.length) return;
 
-    // 캔버스 크기 및 중앙 계산
     const padding = 20;
     const minDimension = Math.min(wrapper.clientWidth, wrapper.clientHeight) - (padding * 2);
     const canvasSize = minDimension + (padding * 2);
@@ -145,39 +148,59 @@ function drawPolarMaze(rows, ringCount) {
         canvas.height = canvasSize;
     });
 
-    // 클리핑 해제 (동심원은 그 자체로 원형)
+    // 클리핑 해제
     mazeCanvas.style.clipPath = 'none';
 
     const cx = canvasSize / 2;
-    const cy = canvasSize / 2;
-    // 반지름 간격 (가장 바깥 링이 캔버스에 꽉 차도록)
+    // 삼각형 중심 보정 (무게중심이 시각적으로 중간에 오도록)
+    const cy = shape === 'triangle' ? canvasSize * 0.6 : canvasSize / 2;
+
+    // 반지름 간격 계산
     const ringWidth = (minDimension / 2) / ringCount;
 
-    mazeCtx.fillStyle = "white"; // 배경 투명/흰색
+    mazeCtx.fillStyle = "white";
     mazeCtx.fillRect(0, 0, canvasSize, canvasSize);
 
-    // 1. 시작점(중심) 색칠
+    // 1. 시작점(중심) 표시
     mazeCtx.beginPath();
-    mazeCtx.arc(cx, cy, ringWidth * 0.6, 0, 2 * Math.PI);
+    if (shape === 'triangle') {
+        // 중심 삼각형 그리기
+        const p1 = getPolyCoordinate(ringWidth * 0.6, 0, 3, cx, cy, shape);
+        const p2 = getPolyCoordinate(ringWidth * 0.6, 1, 3, cx, cy, shape);
+        const p3 = getPolyCoordinate(ringWidth * 0.6, 2, 3, cx, cy, shape);
+        mazeCtx.moveTo(p1.x, p1.y);
+        mazeCtx.lineTo(p2.x, p2.y);
+        mazeCtx.lineTo(p3.x, p3.y);
+        mazeCtx.closePath();
+    } else {
+        mazeCtx.arc(cx, cy, ringWidth * 0.6, 0, 2 * Math.PI);
+    }
     mazeCtx.fillStyle = "#FF5252"; // Start Color
     mazeCtx.fill();
 
-    // 2. 도착점 색칠
+    // 2. 도착점 표시
     if (state.mazeEndPoint) {
         const er = state.mazeEndPoint.r;
         const ei = state.mazeEndPoint.i;
         if (er > 0) {
             const cellCount = rows[er].length;
-            const theta = (2 * Math.PI) / cellCount;
-            const angleStart = ei * theta;
-            const angleEnd = (ei + 1) * theta;
             const innerR = er * ringWidth;
             const outerR = (er + 1) * ringWidth;
 
             mazeCtx.beginPath();
-            mazeCtx.arc(cx, cy, outerR, angleStart, angleEnd, false);
-            mazeCtx.arc(cx, cy, innerR, angleEnd, angleStart, true);
+
+            // 도착 셀의 4개 코너 좌표 계산
+            const pIn1 = getPolyCoordinate(innerR, ei, cellCount, cx, cy, shape);
+            const pIn2 = getPolyCoordinate(innerR, ei + 1, cellCount, cx, cy, shape);
+            const pOut2 = getPolyCoordinate(outerR, ei + 1, cellCount, cx, cy, shape);
+            const pOut1 = getPolyCoordinate(outerR, ei, cellCount, cx, cy, shape);
+
+            mazeCtx.moveTo(pIn1.x, pIn1.y);
+            mazeCtx.lineTo(pIn2.x, pIn2.y);
+            mazeCtx.lineTo(pOut2.x, pOut2.y);
+            mazeCtx.lineTo(pOut1.x, pOut1.y);
             mazeCtx.closePath();
+
             mazeCtx.fillStyle = "#448AFF"; // End Color
             mazeCtx.fill();
         }
@@ -191,43 +214,106 @@ function drawPolarMaze(rows, ringCount) {
     for (let r = 0; r < rows.length; r++) {
         const row = rows[r];
         const cellCount = row.length;
-        const theta = (2 * Math.PI) / cellCount;
         const innerRadius = r * ringWidth;
         const outerRadius = (r + 1) * ringWidth;
 
         for (let i = 0; i < cellCount; i++) {
             const cell = row[i];
-            const angleStart = i * theta;
-            const angleEnd = (i + 1) * theta;
+
+            // 좌표 계산
+            const pIn1 = getPolyCoordinate(innerRadius, i, cellCount, cx, cy, shape);
+            const pIn2 = getPolyCoordinate(innerRadius, i + 1, cellCount, cx, cy, shape);
+            // 바깥쪽 좌표 (CW 벽 그릴 때 사용)
+            const pOut2 = getPolyCoordinate(outerRadius, i + 1, cellCount, cx, cy, shape);
 
             mazeCtx.beginPath();
 
             // In Wall (안쪽 벽) - r=0은 그리지 않음
             if (r > 0 && cell.in) {
-                mazeCtx.arc(cx, cy, innerRadius, angleStart, angleEnd);
+                mazeCtx.moveTo(pIn1.x, pIn1.y);
+                if (shape === 'polar') {
+                    // 원형은 arc 사용
+                    const theta = (2 * Math.PI) / cellCount;
+                    mazeCtx.arc(cx, cy, innerRadius, i * theta, (i + 1) * theta);
+                } else {
+                    // 삼각형은 직선
+                    mazeCtx.lineTo(pIn2.x, pIn2.y);
+                }
                 mazeCtx.stroke();
             }
 
             // CW Wall (시계방향 벽 = 오른쪽 벽)
             if (r > 0 && cell.cw) {
-                // 원주상의 좌표 계산
-                const p1x = cx + Math.cos(angleEnd) * innerRadius;
-                const p1y = cy + Math.sin(angleEnd) * innerRadius;
-                const p2x = cx + Math.cos(angleEnd) * outerRadius;
-                const p2y = cy + Math.sin(angleEnd) * outerRadius;
-
-                mazeCtx.moveTo(p1x, p1y);
-                mazeCtx.lineTo(p2x, p2y);
+                mazeCtx.beginPath();
+                mazeCtx.moveTo(pIn2.x, pIn2.y);
+                mazeCtx.lineTo(pOut2.x, pOut2.y);
                 mazeCtx.stroke();
             }
         }
     }
 
-    // 가장 바깥 테두리 그리기
+    // 가장 바깥 테두리
     mazeCtx.beginPath();
-    mazeCtx.arc(cx, cy, rows.length * ringWidth, 0, 2 * Math.PI);
+    if (shape === 'triangle') {
+        // 삼각형 외곽선
+        const lastRowLen = rows[rows.length-1].length;
+        const maxR = rows.length * ringWidth;
+        const t1 = getPolyCoordinate(maxR, 0, lastRowLen, cx, cy, shape);
+        mazeCtx.moveTo(t1.x, t1.y);
+        for(let i=1; i<=lastRowLen; i++) {
+            const t = getPolyCoordinate(maxR, i, lastRowLen, cx, cy, shape);
+            mazeCtx.lineTo(t.x, t.y);
+        }
+    } else {
+        mazeCtx.arc(cx, cy, rows.length * ringWidth, 0, 2 * Math.PI);
+    }
     mazeCtx.stroke();
 }
+
+// [핵심] 좌표 계산 함수 (원형 vs 삼각형 분기)
+function getPolyCoordinate(radius, index, totalCells, cx, cy, shape) {
+    if (shape === 'polar') {
+        const theta = (2 * Math.PI * index) / totalCells;
+        return {
+            x: cx + Math.cos(theta) * radius,
+            y: cy + Math.sin(theta) * radius
+        };
+    }
+    else if (shape === 'triangle') {
+        // 정삼각형 꼭짓점 계산 (-90도(위), 30도(우하), 150도(좌하))
+        // index가 totalCells 범위 내에서 어디에 위치하느냐에 따라 선형 보간(Lerp)
+
+        // 정삼각형의 꼭짓점 3개
+        const angles = [-Math.PI / 2, Math.PI / 6, (5 * Math.PI) / 6];
+        const v = angles.map(a => ({
+            x: cx + Math.cos(a) * radius,
+            y: cy + Math.sin(a) * radius
+        }));
+
+        // 현재 인덱스가 전체의 몇 퍼센트인지 (0 ~ 3)
+        // 변이 3개이므로 3등분
+        // totalCells는 항상 3의 배수라고 가정 (생성 로직에서 보장)
+        const sideCells = totalCells / 3;
+
+        // 현재 점이 속한 변(0, 1, 2)과 변 내에서의 진행도(t)
+        // index가 totalCells와 같을 경우(한바퀴 돈 끝점) 처리
+        const safeIndex = index % totalCells;
+
+        const sideIndex = Math.floor(safeIndex / sideCells);
+        const segmentIndex = safeIndex % sideCells;
+        const t = segmentIndex / sideCells;
+
+        const startV = v[sideIndex];
+        const endV = v[(sideIndex + 1) % 3];
+
+        // 선형 보간 (Linear Interpolation)
+        return {
+            x: startV.x + (endV.x - startV.x) * t,
+            y: startV.y + (endV.y - startV.y) * t
+        };
+    }
+}
+
 
 // 4. 리사이즈 이벤트 수정 (renderMaze 호출)
 window.addEventListener('resize', () => {
